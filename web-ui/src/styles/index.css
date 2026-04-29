@@ -1,0 +1,42 @@
+/* Tailwind v4: single import drives both base + utilities */
+@import 'tailwindcss';
+
+/* Naive UI integrates via the runtime provider in App.vue, so no
+   theming import is needed here. We just smooth out the page chrome. */
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family:
+    'PingFang SC', 'Helvetica Neue', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, sans-serif;
+  background: #f5f7fb;
+  color: #1f2937;
+}
+
+/* Dark scheme — toggled by App.vue via `prefs.dark`. Naive UI handles
+   its own components; this only fixes the page chrome that sits
+   outside Naive (body bg, plain Tailwind `text-gray-*` etc.). */
+html.dark,
+html.dark body,
+html.dark #app {
+  background: #101014;
+  color: #e5e7eb;
+  color-scheme: dark;
+}
+
+html.dark .border-b,
+html.dark .border-t,
+html.dark .border,
+html.dark .border-l,
+html.dark .border-r {
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

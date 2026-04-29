@@ -1,0 +1,1 @@
+import{al as e,aw as i,ax as s,ay as c}from"./index-CHE8zU3A.js";const l={list:t=>e("/clients",t),get:t=>e(`/clients/${t}`),create:t=>i("/clients",t),update:(t,a)=>c(`/clients/${t}`,a),remove:t=>s(`/clients/${t}`),changeStatus:(t,a)=>i(`/clients/${t}/status`,{status:a}),quickInfo:t=>e(`/clients/${t}/quickinfo`)};export{l as c};

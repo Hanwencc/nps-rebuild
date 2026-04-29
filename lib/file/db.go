@@ -31,6 +31,7 @@ func GetDb() *DbUtils {
 		jsonDb.LoadTaskFromJsonFile()
 		jsonDb.LoadHostFromJsonFile()
 		jsonDb.LoadGlobalFromJsonFile()
+		jsonDb.LoadApiTokensFromJsonFile()
 		Db = &DbUtils{JsonDb: jsonDb}
 	})
 	return Db

@@ -18,6 +18,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/shirou/gopsutil/v3 v3.23.10
 	github.com/xtaci/kcp-go v5.4.20+incompatible
+	golang.org/x/crypto v0.21.0
 	golang.org/x/net v0.23.0
 	golang.org/x/time v0.14.0
 )
@@ -64,7 +65,6 @@ require (
 	github.com/xtaci/lossyconn v0.0.0-20190602105132-8df528c0c9ae // indirect
 	github.com/yuin/goldmark v1.4.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
-	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/image v0.0.0-20220601225756-64ec528b34cd // indirect
 	golang.org/x/mobile v0.0.0-20211207041440-4e6c2922fdee // indirect
 	golang.org/x/sys v0.25.0 // indirect

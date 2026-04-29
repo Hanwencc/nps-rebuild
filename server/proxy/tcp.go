@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -67,8 +66,6 @@ func (s *WebServer) Start() error {
 		<-stop
 	}
 	beego.BConfig.WebConfig.Session.SessionOn = true
-	beego.SetStaticPath(beego.AppConfig.String("web_base_url")+"/static", filepath.Join(common.GetRunPath(), "web", "static"))
-	beego.SetViewsPath(filepath.Join(common.GetRunPath(), "web", "views"))
 	err := errors.New("Web management startup failure ")
 	var l net.Listener
 	if l, err = connection.GetWebManagerListener(); err == nil {

@@ -16,11 +16,12 @@ import (
 
 func NewJsonDb(runPath string) *JsonDb {
 	return &JsonDb{
-		RunPath:        runPath,
-		TaskFilePath:   filepath.Join(runPath, "conf", "tasks.json"),
-		HostFilePath:   filepath.Join(runPath, "conf", "hosts.json"),
-		ClientFilePath: filepath.Join(runPath, "conf", "clients.json"),
-		GlobalFilePath: filepath.Join(runPath, "conf", "global.json"),
+		RunPath:          runPath,
+		TaskFilePath:     filepath.Join(runPath, "conf", "tasks.json"),
+		HostFilePath:     filepath.Join(runPath, "conf", "hosts.json"),
+		ClientFilePath:   filepath.Join(runPath, "conf", "clients.json"),
+		GlobalFilePath:   filepath.Join(runPath, "conf", "global.json"),
+		ApiTokenFilePath: filepath.Join(runPath, "conf", "api_tokens.json"),
 	}
 }
 
@@ -29,15 +30,18 @@ type JsonDb struct {
 	Hosts            sync.Map
 	HostsTmp         sync.Map
 	Clients          sync.Map
+	ApiTokens        sync.Map
 	Global           *Glob
 	RunPath          string
 	ClientIncreaseId int32  //client increased id
 	TaskIncreaseId   int32  //task increased id
 	HostIncreaseId   int32  //host increased id
+	ApiTokenIncreaseId int32 //api token increased id
 	TaskFilePath     string //task file path
 	HostFilePath     string //host file path
 	ClientFilePath   string //client file path
 	GlobalFilePath   string //global file path
+	ApiTokenFilePath string //api token file path
 }
 
 func (s *JsonDb) LoadTaskFromJsonFile() {
@@ -104,6 +108,22 @@ func (s *JsonDb) LoadGlobalFromJsonFile() {
 	})
 }
 
+func (s *JsonDb) LoadApiTokensFromJsonFile() {
+	if !common.FileExists(s.ApiTokenFilePath) {
+		return
+	}
+	loadSyncMapFromFile(s.ApiTokenFilePath, func(v string) {
+		post := new(ApiToken)
+		if json.Unmarshal([]byte(v), post) != nil {
+			return
+		}
+		s.ApiTokens.Store(post.Id, post)
+		if post.Id > int(s.ApiTokenIncreaseId) {
+			s.ApiTokenIncreaseId = int32(post.Id)
+		}
+	})
+}
+
 func (s *JsonDb) GetClient(id int) (c *Client, err error) {
 	if v, ok := s.Clients.Load(id); ok {
 		c = v.(*Client)
@@ -143,6 +163,14 @@ func (s *JsonDb) StoreGlobalToJsonFile() {
 	globalLock.Lock()
 	storeGlobalToFile(s.Global, s.GlobalFilePath)
 	globalLock.Unlock()
+}
+
+var apiTokenLock sync.Mutex
+
+func (s *JsonDb) StoreApiTokensToJsonFile() {
+	apiTokenLock.Lock()
+	storeSyncMapToFile(s.ApiTokens, s.ApiTokenFilePath)
+	apiTokenLock.Unlock()
 }
 
 func (s *JsonDb) GetClientId() int32 {
@@ -208,6 +236,8 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 				return true
 			}
 			b, err = json.Marshal(obj)
+		case *ApiToken:
+			b, err = json.Marshal(value.(*ApiToken))
 		//case *Glob:
 		//	obj := value.(*Glob)
 		//	b, err = json.Marshal(obj)
