@@ -32,7 +32,8 @@ type Client struct {
 	signal    *conn.Conn
 	file      *nps_mux.Mux
 	Version   string
-	retryTime int // it will be add 1 when ping not ok until to 3 will close the client
+	IsTls     bool // signal connection wrapped in TLS (true) or plain TCP/KCP (false)
+	retryTime int  // it will be add 1 when ping not ok until to 3 will close the client
 }
 
 func NewClient(t, f *nps_mux.Mux, s *conn.Conn, vs string) *Client {
@@ -279,6 +280,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 			_ = tcpConn.SetKeepAlive(true)
 			_ = tcpConn.SetKeepAlivePeriod(5 * time.Second)
 		}
+		_, isTls := c.Conn.(*tls.Conn)
 		//the vKey connect by another ,close the client of before
 		if v, ok := s.Client.LoadOrStore(id, NewClient(nil, nil, c, vs)); ok {
 			if v.(*Client).signal != nil {
@@ -286,6 +288,12 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 			}
 			v.(*Client).signal = c
 			v.(*Client).Version = vs
+			v.(*Client).IsTls = isTls
+		} else {
+			// freshly stored entry — initialize tls flag
+			if v2, ok2 := s.Client.Load(id); ok2 {
+				v2.(*Client).IsTls = isTls
+			}
 		}
 		go s.GetHealthFromClient(id, c)
 		logs.Info("clientId %d connection succeeded, address:%s ", id, c.Conn.RemoteAddr())

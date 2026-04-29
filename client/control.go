@@ -109,11 +109,14 @@ func StartFromFile(path string) {
 
 	SetTlsEnable(cnf.CommonConfig.TlsEnable)
 	logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), GetTlsEnable())
+	attempt := 0
 re:
 	if first || cnf.CommonConfig.AutoReconnection {
 		if !first {
-			logs.Info("Reconnecting...")
-			time.Sleep(time.Second * 5)
+			wait := reconnectBackoff(attempt)
+			attempt++
+			logs.Info("Reconnecting in %s ...", wait)
+			time.Sleep(wait)
 		}
 	} else {
 		return
@@ -124,6 +127,7 @@ re:
 		logs.Error(err)
 		goto re
 	}
+	attempt = 0
 	var isPub bool
 	binary.Read(c, binary.LittleEndian, &isPub)
 

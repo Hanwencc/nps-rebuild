@@ -42,6 +42,15 @@ type JsonDb struct {
 	GlobalFilePath   string //global file path
 	ApiTokenFilePath string //api token file path
 	SqliteFilePath   string //sqlite db file path (phase 0+ of JSON->SQLite migration)
+	// dirty tracking (Phase 8 / P1 optimisation): per-type sets of IDs
+	// that have been mutated outside CRUD (flow counters, online state).
+	// Periodic flushers (server.flowSession) only UPSERT entries listed
+	// here, eliminating full-table scans and unnecessary fsyncs in the
+	// steady state. CRUD paths still write through synchronously.
+	dirtyHosts   sync.Map // key: int (host.Id) -> struct{}{}
+	dirtyTasks   sync.Map // key: int (tunnel.Id) -> struct{}{}
+	dirtyClients sync.Map // key: int (client.Id) -> struct{}{}
+	dirtyGlobal  atomic.Bool
 	// SQLite is the opaque handle for the optional SQLite store. Type is
 	// `any` so that this package does not import the sqlite driver,
 	// keeping `npc` (which embeds `lib/file` only for its data models)
@@ -179,6 +188,14 @@ func (s *JsonDb) GetClient(id int) (c *Client, err error) {
 
 var hostLock sync.Mutex
 
+// MarkHostDirty records that the in-memory Host with the given id has
+// been mutated outside the CRUD path (typically by FlowAddHost). The
+// next FlushHostsToStore tick will UPSERT only the marked rows.
+func (s *JsonDb) MarkHostDirty(id int)   { s.dirtyHosts.Store(id, struct{}{}) }
+func (s *JsonDb) MarkTaskDirty(id int)   { s.dirtyTasks.Store(id, struct{}{}) }
+func (s *JsonDb) MarkClientDirty(id int) { s.dirtyClients.Store(id, struct{}{}) }
+func (s *JsonDb) MarkGlobalDirty()       { s.dirtyGlobal.Store(true) }
+
 // FlushHostsToStore performs an UPSERT for every Host in the in-memory
 // registry against the configured HostStore (SQLite). It is a no-op when
 // no store is wired (e.g. early startup or npc).
@@ -186,18 +203,34 @@ var hostLock sync.Mutex
 // Phase 7: JSON write paths have been removed; SQLite is the sole
 // persistence layer. Call sites that previously wrote conf/hosts.json
 // now invoke this helper instead.
+//
+// Phase 8 (P1): only walks the dirty set; the entries are cleared after
+// a successful UPSERT so a quiescent system performs zero writes.
 func (s *JsonDb) FlushHostsToStore() {
 	hostLock.Lock()
 	defer hostLock.Unlock()
 	if s.HostStore == nil {
 		return
 	}
-	s.Hosts.Range(func(_, value interface{}) bool {
-		h, ok := value.(*Host)
-		if !ok || h == nil || h.NoStore {
+	s.dirtyHosts.Range(func(k, _ interface{}) bool {
+		id, ok := k.(int)
+		if !ok {
+			s.dirtyHosts.Delete(k)
 			return true
 		}
-		_ = s.HostStore.UpsertHost(h)
+		v, exists := s.Hosts.Load(id)
+		if !exists {
+			s.dirtyHosts.Delete(id)
+			return true
+		}
+		h, ok := v.(*Host)
+		if !ok || h == nil || h.NoStore {
+			s.dirtyHosts.Delete(id)
+			return true
+		}
+		if err := s.HostStore.UpsertHost(h); err == nil {
+			s.dirtyHosts.Delete(id)
+		}
 		return true
 	})
 }
@@ -211,12 +244,25 @@ func (s *JsonDb) FlushTasksToStore() {
 	if s.TaskStore == nil {
 		return
 	}
-	s.Tasks.Range(func(_, value interface{}) bool {
-		t, ok := value.(*Tunnel)
-		if !ok || t == nil || t.NoStore {
+	s.dirtyTasks.Range(func(k, _ interface{}) bool {
+		id, ok := k.(int)
+		if !ok {
+			s.dirtyTasks.Delete(k)
 			return true
 		}
-		_ = s.TaskStore.UpsertTask(t)
+		v, exists := s.Tasks.Load(id)
+		if !exists {
+			s.dirtyTasks.Delete(id)
+			return true
+		}
+		t, ok := v.(*Tunnel)
+		if !ok || t == nil || t.NoStore {
+			s.dirtyTasks.Delete(id)
+			return true
+		}
+		if err := s.TaskStore.UpsertTask(t); err == nil {
+			s.dirtyTasks.Delete(id)
+		}
 		return true
 	})
 }
@@ -230,12 +276,25 @@ func (s *JsonDb) FlushClientsToStore() {
 	if s.ClientStore == nil {
 		return
 	}
-	s.Clients.Range(func(_, value interface{}) bool {
-		c, ok := value.(*Client)
-		if !ok || c == nil || c.NoStore {
+	s.dirtyClients.Range(func(k, _ interface{}) bool {
+		id, ok := k.(int)
+		if !ok {
+			s.dirtyClients.Delete(k)
 			return true
 		}
-		_ = s.ClientStore.UpsertClient(c)
+		v, exists := s.Clients.Load(id)
+		if !exists {
+			s.dirtyClients.Delete(id)
+			return true
+		}
+		c, ok := v.(*Client)
+		if !ok || c == nil || c.NoStore {
+			s.dirtyClients.Delete(id)
+			return true
+		}
+		if err := s.ClientStore.UpsertClient(c); err == nil {
+			s.dirtyClients.Delete(id)
+		}
 		return true
 	})
 }
@@ -249,7 +308,12 @@ func (s *JsonDb) FlushGlobalToStore() {
 	if s.GlobalStore == nil || s.Global == nil {
 		return
 	}
-	_ = s.GlobalStore.UpsertGlobal(s.Global)
+	if !s.dirtyGlobal.Load() {
+		return
+	}
+	if err := s.GlobalStore.UpsertGlobal(s.Global); err == nil {
+		s.dirtyGlobal.Store(false)
+	}
 }
 
 func (s *JsonDb) GetClientId() int32 {

@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"math/rand"
 	"net"
 	"net/http"
 	"strconv"
@@ -21,6 +22,32 @@ import (
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/crypt"
 )
+
+// reconnectBackoff returns the wait duration before retry attempt `attempt`
+// (0-based). Schedule: 5s, 10s, 20s, 40s, capped at 60s, with ±20% jitter.
+// Used by NPC reconnect loops to avoid thundering-herd against NPS during
+// mass-restart scenarios (see P5 in the security/perf audit).
+func reconnectBackoff(attempt int) time.Duration {
+	const (
+		base = 5 * time.Second
+		max  = 60 * time.Second
+	)
+	if attempt < 0 {
+		attempt = 0
+	}
+	shift := uint(attempt)
+	if shift > 4 { // 5s<<4 = 80s, will be clamped
+		shift = 4
+	}
+	d := base << shift
+	if d > max {
+		d = max
+	}
+	// jitter ±20%
+	jitter := time.Duration(rand.Int63n(int64(d) * 2 / 5)) // 0..40% of d
+	jitter -= time.Duration(int64(d) / 5)                  // shift to ±20%
+	return d + jitter
+}
 
 type TRPClient struct {
 	svrAddr        string
@@ -101,6 +128,7 @@ var CloseClient bool
 // start
 func (s *TRPClient) Start() {
 	CloseClient = false
+	attempt := 0
 retry:
 	if CloseClient {
 		return
@@ -108,15 +136,20 @@ retry:
 	NowStatus = 0
 	c, err := NewConn(s.bridgeConnType, s.vKey, s.svrAddr, common.WORK_MAIN, s.proxyUrl)
 	if err != nil {
-		s.logError("The connection server failed and will be reconnected in five seconds, error", err.Error())
-		time.Sleep(time.Second * 5)
+		wait := reconnectBackoff(attempt)
+		attempt++
+		s.logError("The connection server failed, will reconnect in %s, error %s", wait, err.Error())
+		time.Sleep(wait)
 		goto retry
 	}
 	if c == nil {
-		s.logError("Error data from server, and will be reconnected in five seconds")
-		time.Sleep(time.Second * 5)
+		wait := reconnectBackoff(attempt)
+		attempt++
+		s.logError("Error data from server, will reconnect in %s", wait)
+		time.Sleep(wait)
 		goto retry
 	}
+	attempt = 0
 	s.logInfo("Successful connection with server %s", s.svrAddr)
 	//monitor the connection
 	go s.ping()

@@ -190,6 +190,12 @@ func (Self *receiveWindow) remainingSize(maxSize uint32, delta uint16) (n uint32
 
 func (Self *receiveWindow) calcSize() {
 	// calculating maximum receive window size
+	//
+	// P3: this routine performs floating-point math + a CAS loop on the
+	// hot data path. Sampling once per ~100 writes (instead of the prior
+	// once per 10) cuts the per-packet overhead by an order of magnitude
+	// without materially slowing window adaptation — connBw/muxBw/latency
+	// themselves change far slower than 100 packets.
 	if Self.count == 0 {
 		muxBw := Self.mux.bw.Get()
 		connBw := Self.bw.Get()
@@ -251,7 +257,7 @@ func (Self *receiveWindow) calcSize() {
 				break
 			}
 		}
-		Self.count = -10
+		Self.count = -100
 	}
 	Self.count += 1
 	return

@@ -39,7 +39,17 @@ type Mux struct {
 	counter            *latencyCounter
 	bw                 *bandwidth
 	pingCh             chan []byte
-	pingCheckTime      uint32 // we check the ping per 5s
+	// lastPingTime is the unix-nano timestamp of the last successfully
+	// received muxPingReturn frame. The ping watchdog compares
+	// time.Since(lastPingTime) against pingCheckThreshold to decide
+	// whether the link is dead. Stored atomically.
+	lastPingTime int64
+	// pingCheckThreshold is the dead-link timeout, expressed in seconds
+	// elapsed since the last received ping return (NOT a tick counter).
+	// Older versions interpreted this as "number of failed 5s ticks",
+	// effectively multiplying it by 5; the new semantics align with the
+	// admin-facing label ("断线超时(秒)") and the disconnect_timeout
+	// setting help text.
 	pingCheckThreshold uint32
 	connType           string
 	writeQueue         priorityQueue
@@ -58,7 +68,7 @@ func NewMux(c net.Conn, connType string, pingCheckThreshold int) *Mux {
 		if connType == "kcp" {
 			checkThreshold = 20
 		} else {
-			checkThreshold = 60
+			checkThreshold = 30
 		}
 	} else {
 		checkThreshold = uint32(pingCheckThreshold)
@@ -76,6 +86,7 @@ func NewMux(c net.Conn, connType string, pingCheckThreshold int) *Mux {
 		pingCheckThreshold: checkThreshold,
 		counter:            newLatencyCounter(),
 	}
+	atomic.StoreInt64(&m.lastPingTime, time.Now().UnixNano())
 	m.writeQueue.New()
 	m.newConnQueue.New()
 	//read session by flag
@@ -179,16 +190,17 @@ func (s *Mux) ping() {
 			select {
 			case <-ticker.C:
 			}
-			if atomic.LoadUint32(&s.pingCheckTime) > s.pingCheckThreshold {
-				log.Println("mux: ping time out, checktime", s.pingCheckTime, "threshold", s.pingCheckThreshold)
+			elapsed := time.Since(time.Unix(0, atomic.LoadInt64(&s.lastPingTime)))
+			if elapsed > time.Duration(s.pingCheckThreshold)*time.Second {
+				log.Println("mux: ping timeout, no return for", elapsed, "threshold",
+					time.Duration(s.pingCheckThreshold)*time.Second)
 				_ = s.Close()
-				// more than limit times not receive the ping return package,
-				// mux conn is damaged, maybe a packet drop, close it
+				// no muxPingReturn within the configured window;
+				// the underlying link is dead, close the mux.
 				break
 			}
 			now, _ = time.Now().UTC().MarshalText()
 			s.sendInfo(muxPingFlag, muxPing, now)
-			atomic.AddUint32(&s.pingCheckTime, 1)
 		}
 		return
 	}()
@@ -202,7 +214,7 @@ func (s *Mux) ping() {
 			}
 			select {
 			case data = <-s.pingCh:
-				atomic.StoreUint32(&s.pingCheckTime, 0)
+				atomic.StoreInt64(&s.lastPingTime, time.Now().UnixNano())
 			case <-s.closeChan:
 				break
 			}

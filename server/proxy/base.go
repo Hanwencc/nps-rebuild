@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/common"
@@ -43,19 +44,21 @@ func NewBaseServer(bridge *bridge.Bridge, task *file.Tunnel) *BaseServer {
 }
 
 // add the flow
+//
+// P7: switched from BaseServer.Mutex + plain += to lock-free atomic
+// counters. The BaseServer mutex still guards errorContent etc. but is
+// no longer acquired on every forwarded packet.
 func (s *BaseServer) FlowAdd(in, out int64) {
-	s.Lock()
-	defer s.Unlock()
-	s.task.Flow.ExportFlow += out
-	s.task.Flow.InletFlow += in
+	atomic.AddInt64(&s.task.Flow.ExportFlow, out)
+	atomic.AddInt64(&s.task.Flow.InletFlow, in)
+	file.GetDb().JsonDb.MarkTaskDirty(s.task.Id)
 }
 
 // change the flow
 func (s *BaseServer) FlowAddHost(host *file.Host, in, out int64) {
-	s.Lock()
-	defer s.Unlock()
-	host.Flow.ExportFlow += out
-	host.Flow.InletFlow += in
+	atomic.AddInt64(&host.Flow.ExportFlow, out)
+	atomic.AddInt64(&host.Flow.InletFlow, in)
+	file.GetDb().JsonDb.MarkHostDirty(host.Id)
 }
 
 // write fail bytes to the connection

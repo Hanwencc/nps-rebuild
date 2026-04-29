@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"crypto/subtle"
 	"crypto/tls"
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/cache"
@@ -132,12 +133,14 @@ func (s *httpServer) handleTunneling(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		}
 
-		s.handleHttp(conn.NewConn(c), r)
+		// P6: forward the already-resolved host so handleHttp does not
+		// re-walk the Hosts sync.Map for the first request on this conn.
+		s.handleHttp(conn.NewConn(c), r, host)
 	}
 
 }
 
-func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request) {
+func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, initialHost *file.Host) {
 	var (
 		host       *file.Host
 		target     net.Conn
@@ -175,7 +178,14 @@ reset:
 		return
 	}
 
-	if host, err = file.GetDb().GetInfoByHost(r.Host, r); err != nil {
+	// P6: prefer the host pre-resolved by handleTunneling on the very
+	// first iteration to avoid a redundant Hosts sync.Map walk. On
+	// keep-alive subsequent requests (and on reset) we re-resolve since
+	// r.Host may have changed.
+	if initialHost != nil && !isReset {
+		host = initialHost
+		initialHost = nil
+	} else if host, err = file.GetDb().GetInfoByHost(r.Host, r); err != nil {
 		logs.Notice("the url %s %s %s can't be parsed!, host %s, url %s, remote address %s", r.URL.Scheme, r.Host, r.RequestURI, r.Host, r.URL.Path, remoteAddr)
 		c.Close()
 		return
@@ -210,7 +220,7 @@ reset:
 				if strings.Contains(rawQuery, "pass=") {
 					// 截取 = 后面的值
 					pass := strings.Split(rawQuery, "pass=")[1]
-					if pass == host.Client.IpWhitePass {
+					if subtle.ConstantTimeCompare([]byte(pass), []byte(host.Client.IpWhitePass)) == 1 {
 						host.Client.IpWhiteList = append(host.Client.IpWhiteList, ip)
 						file.GetDb().UpdateClient(host.Client)
 						logs.Info("客户端IP白名单认证授权成功:vkey [%s] ip [%s] password [%s]", host.Client.VerifyKey, ip, pass)

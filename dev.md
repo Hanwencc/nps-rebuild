@@ -12,4 +12,5 @@ go run cmd/nps/nps.go -log_path=f:\MY_TEST\nps\nps.log
 
 
 
-go run cmd/npc/npc.go -server=127.0.0.1:8024 -vkey=123 -type=tcp
+go run cmd/npc/npc.go -server=127.0.0.1:8024 -vkey=75fd9a4515 -type=tcp
+go run cmd/npc/npc.go -server=127.0.0.1:8025 -vkey=75fd9a4515 -type=tcp -tls_enable=true

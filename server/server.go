@@ -332,12 +332,19 @@ func dealClientData() {
 
 	file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
 		v := value.(*file.Client)
+		prevConnect := v.IsConnect
+		prevVersion := v.Version
 		if vv, ok := Bridge.Client.Load(v.Id); ok {
 			v.IsConnect = true
 			v.LastOnlineTime = time.Now().Format("2006-01-02 15:04:05")
 			v.Version = vv.(*bridge.Client).Version
+			v.IsTls = vv.(*bridge.Client).IsTls
 		} else {
 			v.IsConnect = false
+			v.IsTls = false
+		}
+		if prevConnect != v.IsConnect || prevVersion != v.Version {
+			file.GetDb().JsonDb.MarkClientDirty(v.Id)
 		}
 
 		return true

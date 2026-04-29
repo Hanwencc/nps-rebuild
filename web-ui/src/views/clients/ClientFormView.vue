@@ -37,8 +37,8 @@ const form = reactive<Required<ClientPayload>>({
   u: '',
   p: '',
   compress: false,
-  crypt: false,
-  configConnAllow: true,
+  crypt: true,
+  configConnAllow: false,
   rateLimit: 0,
   maxConn: 0,
   maxTunnel: 0,
@@ -53,6 +53,23 @@ const form = reactive<Required<ClientPayload>>({
 
 const blackText = ref('')
 const whiteText = ref('')
+
+function generateVkey(len: number): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let out = ''
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.getRandomValues === 'function'
+  ) {
+    const buf = new Uint32Array(len)
+    crypto.getRandomValues(buf)
+    for (let i = 0; i < len; i++) out += chars[buf[i] % chars.length]
+  } else {
+    for (let i = 0; i < len; i++)
+      out += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return out
+}
 
 async function load() {
   if (!editing.value) return
@@ -89,6 +106,9 @@ async function submit() {
   saving.value = true
   form.blackIpList = blackText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
   form.ipWhiteList = whiteText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+  if (!editing.value && !form.vkey.trim()) {
+    form.vkey = generateVkey(20)
+  }
   try {
     if (editing.value) {
       await clientApi.update(Number(props.id), { ...form })

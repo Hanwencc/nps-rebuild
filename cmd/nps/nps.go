@@ -499,6 +499,11 @@ func run() {
 				logs.Info("app_settings: applied %d row(s) from SQLite onto beego.AppConfig", n)
 			}
 		}
+		// Phase 6.1: bridge.ServerTlsEnable was read at line 107 from
+		// nps.conf only; refresh it now that SQLite has overridden the
+		// in-memory beego.AppConfig (otherwise SQLite-stored tls_enable
+		// is silently ignored on startup — listener never starts).
+		bridge.ServerTlsEnable = beego.AppConfig.DefaultBool("tls_enable", false)
 		registerSettingsHotHooks()
 		// Wire the persistence hook so all subsequent Client CRUD
 		// dual-writes through SQLite. Must happen AFTER backfill/load

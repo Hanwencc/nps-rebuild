@@ -2,6 +2,7 @@ package file
 
 import (
 	"crypto/md5"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net/http"
@@ -341,9 +342,10 @@ func (s *DbUtils) GetGlobal() (c *Glob) {
 
 func (s *DbUtils) GetClientIdByVkey(vkey string) (id int, err error) {
 	var exist bool
+	vkeyBytes := []byte(vkey)
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
 		v := value.(*Client)
-		if crypt.Md5(v.VerifyKey) == vkey {
+		if subtle.ConstantTimeCompare([]byte(crypt.Md5(v.VerifyKey)), vkeyBytes) == 1 {
 			exist = true
 			id = v.Id
 			return false
@@ -359,9 +361,12 @@ func (s *DbUtils) GetClientIdByVkey(vkey string) (id int, err error) {
 
 func (s *DbUtils) GetClientByVkey(vkey string) (c *Client, err error) {
 	var exist bool
+	vkeyBytes := []byte(vkey)
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
 		v := value.(*Client)
-		if fmt.Sprintf("%x", md5.Sum([]byte(v.VerifyKey))) == vkey {
+		sum := md5.Sum([]byte(v.VerifyKey))
+		hex := fmt.Sprintf("%x", sum)
+		if subtle.ConstantTimeCompare([]byte(hex), vkeyBytes) == 1 {
 			exist = true
 			c = v
 			return false

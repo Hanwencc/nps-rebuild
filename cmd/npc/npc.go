@@ -42,7 +42,7 @@ var (
 	pprofAddr      = flag.String("pprof", "", "PProf debug addr (ip:port)")
 	stunAddr       = flag.String("stun_addr", "stun.stunprotocol.org:3478", "stun server address (eg:stun.stunprotocol.org:3478)")
 	ver            = flag.Bool("version", false, "show current version")
-	disconnectTime = flag.Int("disconnect_timeout", 60, "not receiving check packet times, until timeout will disconnect the client")
+	disconnectTime = flag.Int("disconnect_timeout", 60, "seconds without a mux ping return before the link is considered dead and reconnected")
 	tlsEnable      = flag.Bool("tls_enable", false, "enable tls")
 )
 

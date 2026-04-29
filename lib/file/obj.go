@@ -17,11 +17,15 @@ type Flow struct {
 	sync.RWMutex
 }
 
+// Add atomically increments the inlet/export counters. Per P7 of the
+// 2026-04-29 audit the previous mutex-guarded version was a hot-path
+// bottleneck (every forwarded packet acquired the lock). Plain int64
+// fields are 64-bit aligned (struct head) so atomic ops are safe on
+// all supported architectures. Reads elsewhere in the codebase use
+// non-atomic loads which is acceptable for periodic snapshots.
 func (s *Flow) Add(in, out int64) {
-	s.Lock()
-	defer s.Unlock()
-	s.InletFlow += int64(in)
-	s.ExportFlow += int64(out)
+	atomic.AddInt64(&s.InletFlow, in)
+	atomic.AddInt64(&s.ExportFlow, out)
 }
 
 type Config struct {
@@ -39,6 +43,7 @@ type Client struct {
 	Remark          string     //remark
 	Status          bool       //is allow connect
 	IsConnect       bool       //is the client connect
+	IsTls           bool       //bridge signal connection is TLS (transient, refreshed by dealClientData)
 	RateLimit       int        //rate /kb
 	Flow            *Flow      //flow setting
 	Rate            *rate.Rate //rate limit

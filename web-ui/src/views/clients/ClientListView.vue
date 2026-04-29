@@ -184,13 +184,33 @@ const columns = computed<DataTableColumns<Client>>(() => [
   {
     title: t('client.connect'),
     key: 'connect',
-    width: 100,
-    render: (row) =>
-      h(
-        NTag,
-        { type: row.IsConnect ? 'info' : 'default', size: 'small', round: true },
-        () => (row.IsConnect ? t('common.online') : t('common.offline')),
-      ),
+    width: 140,
+    render: (row) => {
+      if (!row.IsConnect) {
+        return h(
+          NTag,
+          { type: 'default', size: 'small', round: true },
+          () => t('common.offline'),
+        )
+      }
+      return h(NSpace, { size: 4, wrap: false }, () => [
+        h(
+          NTag,
+          { type: 'info', size: 'small', round: true },
+          () => t('common.online'),
+        ),
+        h(
+          NTag,
+          {
+            type: row.IsTls ? 'success' : 'warning',
+            size: 'small',
+            round: true,
+            bordered: false,
+          },
+          () => (row.IsTls ? t('client.tls') : t('client.tcp')),
+        ),
+      ])
+    },
   },
   {
     title: t('common.actions'),

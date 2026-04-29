@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"math/rand"
 	"net"
@@ -13,6 +14,13 @@ import (
 	"ehang.io/nps/server"
 	"github.com/astaxie/beego"
 )
+
+// ctEq returns true iff a == b in constant time. Always compares the full
+// length of the longer input to avoid leaking length information through
+// timing. Used for password / vkey / token comparisons.
+func ctEq(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
 
 // AuthController exposes session/login endpoints. It does NOT inherit
 // baseController.Prepare() (auth required) because login itself must
@@ -124,8 +132,8 @@ func (c *AuthController) Login() {
 }
 
 func (c *AuthController) attemptLogin(username, password string) bool {
-	if password == beego.AppConfig.String("web_password") &&
-		username == beego.AppConfig.String("web_username") {
+	if ctEq(password, beego.AppConfig.String("web_password")) &&
+		ctEq(username, beego.AppConfig.String("web_username")) {
 		c.SetSession("isAdmin", true)
 		c.DelSession("clientId")
 		c.DelSession("username")
@@ -145,10 +153,10 @@ func (c *AuthController) attemptLogin(username, password string) bool {
 		}
 		match := false
 		if v.WebUserName == "" && v.WebPassword == "" {
-			if username == "user" && v.VerifyKey == password {
+			if username == "user" && ctEq(v.VerifyKey, password) {
 				match = true
 			}
-		} else if v.WebUserName == username && v.WebPassword == password {
+		} else if v.WebUserName == username && ctEq(v.WebPassword, password) {
 			match = true
 		}
 		if match {

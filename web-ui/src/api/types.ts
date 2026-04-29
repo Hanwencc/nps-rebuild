@@ -43,6 +43,7 @@ export interface Client {
   Remark: string
   Status: boolean
   IsConnect: boolean
+  IsTls: boolean
   RateLimit: number
   Flow: FlowInfo
   Rate: RateInfo
