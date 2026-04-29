@@ -1,11 +1,64 @@
-FROM golang:1.24 as builder
-ARG GOPROXY=direct
-WORKDIR /go/src/ehang.io/nps
-COPY . .
-RUN go get -d -v ./... 
-RUN CGO_ENABLED=0 go build -ldflags="-w -s -extldflags -static" ./cmd/npc/npc.go
+# syntax=docker/dockerfile:1.7
+#
+# npc client image — much simpler than nps:
+#   - no embedded web UI, no SQLite
+#   - statically compiled, runs on distroless/static as `nonroot`
+#
+# Build (multi-arch via buildx):
+#   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7,linux/386 \
+#       -f Dockerfile.npc -t ghcr.io/<owner>/npc:latest --push .
 
-FROM scratch
-COPY --from=builder /go/src/ehang.io/nps/npc /
-VOLUME /conf
+ARG GO_VERSION=1.25
+ARG ALPINE_VERSION=3.20
+
+# ---------- builder --------------------------------------------------------
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV CGO_ENABLED=0 \
+    GOOS=${TARGETOS} \
+    GOARCH=${TARGETARCH} \
+    GOPROXY=${GOPROXY}
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . .
+
+# `cmd/npc` carries a pre-existing `main redeclared` error between
+# npc.go and sdk.go when building the whole package. The container
+# only ships the CLI, so build the single file explicitly.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    case "${TARGETARCH}/${TARGETVARIANT}" in \
+        arm/v6) export GOARM=6 ;; \
+        arm/v7) export GOARM=7 ;; \
+        arm/*)  export GOARM=7 ;; \
+    esac && \
+    go build -trimpath \
+        -ldflags="-w -s -extldflags '-static'" \
+        -o /out/npc ./cmd/npc/npc.go
+
+# ---------- runtime --------------------------------------------------------
+FROM gcr.io/distroless/static-debian12:nonroot AS runtime
+LABEL org.opencontainers.image.title="npc" \
+      org.opencontainers.image.description="NPS client (npc) — intranet penetration agent" \
+      org.opencontainers.image.source="https://github.com/ehang-io/nps" \
+      org.opencontainers.image.licenses="GPL-3.0"
+
+WORKDIR /
+COPY --from=builder /out/npc /npc
+
+USER nonroot:nonroot
+VOLUME ["/conf"]
+
 ENTRYPOINT ["/npc"]
+# Default to "show help" so a bare `docker run` is informative; users
+# pass real flags after the image name, e.g.
+#   docker run --rm ghcr.io/<owner>/npc:latest -server=host:8024 -vkey=...
+CMD ["--help"]

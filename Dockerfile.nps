@@ -1,12 +1,97 @@
-FROM golang:1.24 as builder
-ARG GOPROXY=direct
-WORKDIR /go/src/ehang.io/nps
-COPY . .
-RUN go get -d -v ./...
-RUN CGO_ENABLED=0 go build -ldflags="-w -s -extldflags -static" ./cmd/nps/nps.go
+# syntax=docker/dockerfile:1.7
+#
+# nps server image — multi-stage build:
+#   1. node : `yarn build` the Vue 3 SPA into web/webui/dist so it's
+#      embedded into the Go binary via web/webui/embed.go.
+#   2. go   : compile a fully-static `nps` binary. modernc.org/sqlite
+#      is pure-Go so CGO stays disabled and the result runs on
+#      `scratch`/distroless without libc.
+#   3. run  : distroless/static — no shell, no package manager, runs
+#      as the unprivileged `nonroot` (uid 65532) user.
+#
+# Build (multi-arch via buildx):
+#   docker buildx build --platform linux/amd64,linux/arm64,linux/386 \
+#       -f Dockerfile.nps -t ghcr.io/<owner>/nps:latest --push .
 
-FROM scratch
-COPY --from=builder /go/src/ehang.io/nps/nps /
-COPY --from=builder /go/src/ehang.io/nps/web /web
-VOLUME /conf
-CMD ["/nps"]
+ARG GO_VERSION=1.25
+ARG NODE_VERSION=20
+ARG ALPINE_VERSION=3.20
+
+# ---------- 1. frontend ----------------------------------------------------
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS frontend
+WORKDIR /src/web-ui
+# Install deps first (separate layer for cache hit on source-only edits).
+COPY web-ui/package.json web-ui/yarn.lock ./
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn \
+    yarn install --frozen-lockfile
+COPY web-ui/ ./
+# vite.config.ts writes the build output to ../web/webui/dist, which
+# Go embeds via go:embed. Pass NODE_OPTIONS to keep memory bounded on
+# small CI runners.
+ENV NODE_OPTIONS=--max-old-space-size=2048
+RUN yarn build
+
+# ---------- 2. backend -----------------------------------------------------
+# BUILDPLATFORM keeps the compiler running on the native arch of the
+# build host while cross-compiling to TARGETPLATFORM — much faster than
+# QEMU-emulating the whole `go build`.
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV CGO_ENABLED=0 \
+    GOOS=${TARGETOS} \
+    GOARCH=${TARGETARCH} \
+    GOPROXY=${GOPROXY}
+WORKDIR /src
+
+# Module download cached separately from source.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . .
+# Embedded SPA from the frontend stage.
+COPY --from=frontend /src/web/webui/dist ./web/webui/dist
+
+# linux/arm/v7 → GOARM=7 ; linux/arm/v6 → GOARM=6
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    case "${TARGETARCH}/${TARGETVARIANT}" in \
+        arm/v6) export GOARM=6 ;; \
+        arm/v7) export GOARM=7 ;; \
+        arm/*)  export GOARM=7 ;; \
+    esac && \
+    go build -trimpath \
+        -ldflags="-w -s -extldflags '-static'" \
+        -o /out/nps ./cmd/nps
+
+# ---------- 3. runtime -----------------------------------------------------
+# distroless/static includes ca-certificates + tzdata + /etc/passwd with
+# the `nonroot` user (uid 65532). No shell, no package manager.
+FROM gcr.io/distroless/static-debian12:nonroot AS runtime
+LABEL org.opencontainers.image.title="nps" \
+      org.opencontainers.image.description="NPS — intranet penetration proxy server" \
+      org.opencontainers.image.source="https://github.com/ehang-io/nps" \
+      org.opencontainers.image.licenses="GPL-3.0"
+
+WORKDIR /
+COPY --from=builder /out/nps /nps
+# Default config bundle, used on first boot when /conf is an empty volume.
+# Mount-override at runtime: `-v $(pwd)/conf:/conf`.
+COPY --chown=nonroot:nonroot conf /conf
+
+USER nonroot:nonroot
+
+# 8024  bridge (TCP/KCP)
+# 8025  TLS bridge
+# 8080  HTTP proxy
+# 8443  HTTPS proxy
+# 8090  P2P UDP
+# 8023  Web admin
+EXPOSE 8024/tcp 8024/udp 8025/tcp 8080/tcp 8443/tcp 8090/udp 8023/tcp
+VOLUME ["/conf"]
+
+ENTRYPOINT ["/nps"]
