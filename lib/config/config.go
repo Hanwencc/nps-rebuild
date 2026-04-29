@@ -16,9 +16,16 @@ type CommonConfig struct {
 	Tp               string //bridgeType kcp or tcp
 	AutoReconnection bool
 	TlsEnable        bool
-	ProxyUrl         string
-	Client           *file.Client
-	DisconnectTime   int
+	// TlsServerFingerprint is the SHA-256 hex digest of the NPS
+	// bridge cert. When non-empty the NPC handshake aborts unless
+	// the server presents exactly this cert — the only defence
+	// against MITM on the bridge channel. Accepts colon-, space- or
+	// dash-separated hex; see crypt.ParseFingerprint. Empty value =
+	// legacy unsafe behaviour (encrypted but unauthenticated).
+	TlsServerFingerprint string
+	ProxyUrl             string
+	Client               *file.Client
+	DisconnectTime       int
 }
 
 type LocalServer struct {
@@ -153,6 +160,8 @@ func dealCommon(s string) *CommonConfig {
 			c.DisconnectTime = common.GetIntNoErrByStr(item[1])
 		case "tls_enable":
 			c.TlsEnable = common.GetBoolByStr(item[1])
+		case "tls_server_fingerprint":
+			c.TlsServerFingerprint = item[1]
 		}
 	}
 	return c

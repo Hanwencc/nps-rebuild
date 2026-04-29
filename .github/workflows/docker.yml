@@ -1,55 +1,90 @@
 name: Docker
 
+# Triggers:
+#   - workflow_dispatch: manual dry-run / re-publish from a tag
+#   - release: published — runs once per release, regardless of which
+#     branch the tag was cut from. NOTE: GitHub Actions does NOT honour
+#     `branches:` or `tags:` filters on the `release` event, so they
+#     are intentionally omitted (the old config silently ignored them).
 on:
   workflow_dispatch:
   release:
     types: [published]
-#    branches: [ master ]
-    tags: [v*]
+
+# REGISTRY is GHCR. Images are published under the repository owner
+# (lowercased by docker/metadata-action — required for org names that
+# contain capitals). Switch to docker.io here if a DockerHub mirror is
+# preferred; the rest of the workflow is registry-agnostic.
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+# GHCR push needs `packages: write`; release-event commits implicitly
+# get `contents: read` only, so it must be requested explicitly.
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build_docker:
-
     runs-on: ubuntu-latest
-    steps:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: nps
+            file: ./Dockerfile.nps
+          - name: npc
+            file: ./Dockerfile.npc
 
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
-    - name: Set env
-      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v1
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-buildx-
-    - name: Login to DockerHub
-      uses: docker/login-action@v1
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-    - name: Build and push nps
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        file: ./Dockerfile.nps
-        platforms: linux/amd64,linux/arm,linux/arm64
-        push: true
-        tags: |
-          ${{ secrets.DOCKERHUB_USERNAME }}/nps:latest
-          ${{ secrets.DOCKERHUB_USERNAME }}/nps:${{ env.RELEASE_VERSION }}
-    - name: Build and push npc
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        file: ./Dockerfile.npc
-        platforms: linux/amd64,linux/arm,linux/arm64
-        push: true
-        tags: |
-          ${{ secrets.DOCKERHUB_USERNAME }}/npc:latest
-          ${{ secrets.DOCKERHUB_USERNAME }}/npc:${{ env.RELEASE_VERSION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # GHA cache backend (`type=gha`) replaces the manual /tmp cache
+      # dance the old workflow used. Buildx prunes automatically; no
+      # post-step needed.
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # metadata-action computes:
+      #   - latest tag on default-branch builds
+      #   - semver tags from git refs (v1.2.3 -> 1.2.3, 1.2, 1)
+      #   - sha tag for traceability on workflow_dispatch
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.name }}
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=sha,format=short
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          # Multi-arch matrix. armv6/armv7/386 added per request; drop
+          # any that fail to cross-compile in your Dockerfile.
+          platforms: linux/amd64,linux/386,linux/arm64,linux/arm/v6,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+          provenance: false

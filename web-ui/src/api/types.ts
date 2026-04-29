@@ -93,4 +93,7 @@ export interface QuickInfo {
   bridgePort: number
   bridgeType: string
   tlsPort: number
+  /** SHA-256 hex of the bridge cert (colon-separated lowercase). Empty
+   * when nps was not restarted after the fingerprint feature shipped. */
+  tlsFingerprint?: string
 }

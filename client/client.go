@@ -182,7 +182,7 @@ func (s *TRPClient) handleMain() {
 			} else if pwd, err := s.signal.GetShortLenContent(); err == nil {
 				var localAddr string
 				//The local port remains unchanged for a certain period of time
-				if v, ok := s.p2pAddr[crypt.Md5(string(pwd)+strconv.Itoa(int(time.Now().Unix()/100)))]; !ok {
+				if v, ok := s.p2pAddr[crypt.HashShort(string(pwd)+strconv.Itoa(int(time.Now().Unix()/100)))]; !ok {
 					tmpConn, err := common.GetLocalUdpAddr()
 					if err != nil {
 						s.logError(err.Error())

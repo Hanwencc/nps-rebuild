@@ -23,8 +23,8 @@ var authFreePaths = map[string]struct{}{
 //  2. it presents a valid API token (X-Api-Key + X-Api-Secret, or
 //     `Authorization: Bearer <keyId>.<secret>`).
 //
-// The legacy md5(auth_key+timestamp) signature is no longer accepted;
-// machine-to-machine callers must migrate to API tokens.
+// The legacy md5 signature flow has been removed; machine-to-machine
+// callers must use API tokens.
 func (c *baseController) Prepare() {
 	c.Ctx.Output.Header("Cache-Control", "no-store")
 

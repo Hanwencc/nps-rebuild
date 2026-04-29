@@ -157,7 +157,7 @@ func handleSecret(localTcpConn net.Conn, config *config.CommonConfig, l *config.
 		logs.Error("Local connection server failed ", err.Error())
 		return
 	}
-	if _, err := remoteConn.Write([]byte(crypt.Md5(l.Password))); err != nil {
+	if _, err := remoteConn.Write([]byte(crypt.HashShort(l.Password))); err != nil {
 		logs.Error("Local connection server failed ", err.Error())
 		return
 	}
@@ -190,7 +190,7 @@ func newUdpConn(localAddr string, config *config.CommonConfig, l *config.LocalSe
 		logs.Error("Local connection server failed ", err.Error())
 		return
 	}
-	if _, err := remoteConn.Write([]byte(crypt.Md5(l.Password))); err != nil {
+	if _, err := remoteConn.Write([]byte(crypt.HashShort(l.Password))); err != nil {
 		logs.Error("Local connection server failed ", err.Error())
 		return
 	}
@@ -202,7 +202,7 @@ func newUdpConn(localAddr string, config *config.CommonConfig, l *config.LocalSe
 	}
 	var localConn net.PacketConn
 	var remoteAddress string
-	if remoteAddress, localConn, err = handleP2PUdp(localAddr, string(rAddr), crypt.Md5(l.Password), common.WORK_P2P_VISITOR); err != nil {
+	if remoteAddress, localConn, err = handleP2PUdp(localAddr, string(rAddr), crypt.HashShort(l.Password), common.WORK_P2P_VISITOR); err != nil {
 		logs.Error(err)
 		return
 	}

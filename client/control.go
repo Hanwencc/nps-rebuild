@@ -2,7 +2,10 @@ package client
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -40,6 +43,78 @@ func GetTlsEnable() bool {
 	return tlsEnable1
 }
 
+// tlsServerFingerprintRaw is the parsed 32-byte SHA-256 pin of the
+// expected NPS bridge cert. Empty == no pin (legacy unsafe handshake).
+var (
+	tlsServerFingerprintRaw []byte
+	tlsPinWarnedOnce        bool
+)
+
+// SetTlsServerFingerprint accepts the operator-supplied pin in any of
+// the formats crypt.ParseFingerprint allows. An empty / unparseable
+// value clears the pin and falls back to the legacy InsecureSkipVerify
+// handshake (a warning is logged on first dial in that case).
+func SetTlsServerFingerprint(fp string) {
+	fp = strings.TrimSpace(fp)
+	if fp == "" {
+		tlsServerFingerprintRaw = nil
+		return
+	}
+	raw, err := crypt.ParseFingerprint(fp)
+	if err != nil {
+		logs.Error("tls_server_fingerprint 解析失败 (%v) — 已忽略，TLS 通道将不校验服务端证书", err)
+		tlsServerFingerprintRaw = nil
+		return
+	}
+	tlsServerFingerprintRaw = raw
+}
+
+func GetTlsServerFingerprint() []byte {
+	if len(tlsServerFingerprintRaw) == 0 {
+		return nil
+	}
+	out := make([]byte, len(tlsServerFingerprintRaw))
+	copy(out, tlsServerFingerprintRaw)
+	return out
+}
+
+// dialPinnedTLS opens an MITM-resistant TLS connection to the NPS
+// bridge. When tls_server_fingerprint has been configured the
+// handshake aborts unless the leaf cert's SHA-256 matches; otherwise
+// we keep the legacy InsecureSkipVerify behaviour but log a one-shot
+// warning so the operator notices.
+func dialPinnedTLS(server string) (net.Conn, error) {
+	expected := GetTlsServerFingerprint()
+	if len(expected) == 0 {
+		if !tlsPinWarnedOnce {
+			tlsPinWarnedOnce = true
+			logs.Warn("未启用 TLS 指纹校验：建议在 npc.conf / 命令行配置 tls_server_fingerprint=<NPS 启动日志中的指纹>，否则无法防御中间人攻击")
+		}
+		conf := &tls.Config{InsecureSkipVerify: true}
+		return tls.Dial("tcp", server, conf)
+	}
+	// We deliberately skip the standard chain check — the bridge cert
+	// is self-signed and identified solely by its sha256 pin. A net.Dial
+	// + crypt.NewTlsClientConnPin pair would also work, but tls.Dial
+	// here gives us the right Conn type with no extra wrapping.
+	pin := make([]byte, len(expected))
+	copy(pin, expected)
+	conf := &tls.Config{
+		InsecureSkipVerify: true,
+		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			if len(rawCerts) == 0 {
+				return errors.New("tls pin: server presented no certificate")
+			}
+			got := sha256.Sum256(rawCerts[0])
+			if subtle.ConstantTimeCompare(got[:], pin) != 1 {
+				return fmt.Errorf("tls pin: server cert sha256 mismatch (got %x, expected %x)", got[:], pin)
+			}
+			return nil
+		},
+	}
+	return tls.Dial("tcp", server, conf)
+}
+
 func GetTaskStatus(path string) {
 	cnf, err := config.NewConfig(path)
 	if err != nil {
@@ -55,7 +130,7 @@ func GetTaskStatus(path string) {
 	//read now vKey and write to server
 	if f, err := common.ReadAllFromFile(filepath.Join(common.GetTmpPath(), "npc_vkey.txt")); err != nil {
 		log.Fatalln(err)
-	} else if _, err := c.Write([]byte(crypt.Md5(string(f)))); err != nil {
+	} else if _, err := c.Write([]byte(crypt.HashShort(string(f)))); err != nil {
 		log.Fatalln(err)
 	}
 	var isPub bool
@@ -108,6 +183,7 @@ func StartFromFile(path string) {
 	logs.Info("Loading configuration file %s successfully", path)
 
 	SetTlsEnable(cnf.CommonConfig.TlsEnable)
+	SetTlsServerFingerprint(cnf.CommonConfig.TlsServerFingerprint)
 	logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), GetTlsEnable())
 	attempt := 0
 re:
@@ -220,11 +296,7 @@ func NewConn(tp string, vkey string, server string, connType string, proxyUrl st
 			}
 		} else {
 			if GetTlsEnable() {
-				//tls 流量加密
-				conf := &tls.Config{
-					InsecureSkipVerify: true,
-				}
-				connection, err = tls.Dial("tcp", server, conf)
+				connection, err = dialPinnedTLS(server)
 			} else {
 				connection, err = net.Dial("tcp", server)
 			}
@@ -273,7 +345,7 @@ func NewConn(tp string, vkey string, server string, connType string, proxyUrl st
 		logs.Error(err)
 		return nil, err
 	}
-	if crypt.Md5(version.GetVersion()) != string(b) {
+	if crypt.HashShort(version.GetVersion()) != string(b) {
 		//logs.Error("The client does not match the server version. The current core version of the client is", version.GetVersion())
 		//return nil, err
 	}

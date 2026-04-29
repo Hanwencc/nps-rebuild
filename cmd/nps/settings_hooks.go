@@ -145,7 +145,7 @@ func parseLogLevel(s string) int {
 
 func isSecretKey(k string) bool {
 	switch k {
-	case "auth_key", "auth_crypt_key", "public_vkey":
+	case "public_vkey":
 		return true
 	}
 	return false

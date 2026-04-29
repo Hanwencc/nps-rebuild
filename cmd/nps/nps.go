@@ -26,7 +26,6 @@ import (
 	"ehang.io/nps/web/routers"
 
 	"ehang.io/nps/lib/common"
-	"ehang.io/nps/lib/crypt"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 
@@ -504,6 +503,17 @@ func run() {
 		// in-memory beego.AppConfig (otherwise SQLite-stored tls_enable
 		// is silently ignored on startup — listener never starts).
 		bridge.ServerTlsEnable = beego.AppConfig.DefaultBool("tls_enable", false)
+		// Phase 6.1.1: scrub legacy keys whose backing code has been
+		// removed. They still occupy app_settings rows from old boots
+		// (and old nps.conf templates), so the SettingsController's
+		// "其他" group surfaces them in the UI even though setting them
+		// has no effect any more.
+		pruneLegacySettings(store)
+		// Phase 6.2: harden the optional public client. If the operator
+		// left public_vkey at the historical "123" default (or any
+		// other weak / too-short value) auto-rotate to a fresh 20-char
+		// random vkey and log the cleartext exactly once.
+		ensurePublicVkey(store)
 		registerSettingsHotHooks()
 		// Wire the persistence hook so all subsequent Client CRUD
 		// dual-writes through SQLite. Must happen AFTER backfill/load
@@ -526,8 +536,12 @@ func run() {
 	logs.Info("the config path is:" + common.GetRunPath())
 	logs.Info("the version of server is %s ,allow client core version to be %s,tls enable is %t", version.VERSION, version.GetVersion(), bridge.ServerTlsEnable)
 	connection.InitConnectionService()
-	//crypt.InitTls(filepath.Join(common.GetRunPath(), "conf", "server.pem"), filepath.Join(common.GetRunPath(), "conf", "server.key"))
-	crypt.InitTls()
+	// Phase 6.3: persist the bridge TLS cert to disk and log its
+	// SHA-256 fingerprint so NPC operators can pin it via
+	// tls_server_fingerprint. Falls back to ephemeral cert on disk
+	// failure (pinning then becomes impossible until the operator
+	// fixes perms).
+	initBridgeTlsCert(file.GetDb().JsonDb.SQLite)
 	tool.InitAllowPort()
 	tool.StartSystemInfo()
 	timeout, err := beego.AppConfig.Int("disconnect_timeout")

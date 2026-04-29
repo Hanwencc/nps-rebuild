@@ -23,6 +23,11 @@ func Init() {
 	// by every JSON-decoding handler under /api/v1.
 	beego.BConfig.CopyRequestBody = true
 
+	// Cookie hardening (HttpOnly/Secure/SameSite=Strict) + CSRF
+	// guard on /auth/login. Must run before AddNamespace so the
+	// BeforeRouter wrapping kicks in for every API request.
+	api.RegisterSecurityFilters()
+
 	// ---------- /api/v1 (RESTful) ----------------------------------------
 	apiNs := beego.NewNamespace(web_base_url+"/api/v1",
 		// auth
@@ -63,8 +68,8 @@ func Init() {
 	beego.AddNamespace(apiNs)
 
 	// ---------- /auth/* legacy public endpoints --------------------------
-	// Only the IP-whitelist flow remains; the md5(auth_key+ts) signature
-	// has been removed in favour of API tokens (see /api/v1/tokens).
+	// Only the IP-whitelist flow remains; the md5 signature flow has
+	// been removed in favour of API tokens (see /api/v1/tokens).
 	beego.Router(web_base_url+"/auth/ipwhiteauth", &api.LegacyAuthController{}, "*:IpWhiteAuth")
 
 	// ---------- SPA static handler ---------------------------------------

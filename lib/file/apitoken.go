@@ -14,7 +14,7 @@ import (
 )
 
 // ApiToken is a scoped, revocable credential used for machine-to-machine
-// access to /api/v1/*. It supersedes the single shared `auth_key` from
+// access to /api/v1/*. It supersedes the single shared API key from
 // nps.conf; the legacy key still works but its use is discouraged.
 //
 // On the wire callers send:

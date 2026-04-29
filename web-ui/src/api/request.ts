@@ -44,13 +44,39 @@ http.interceptors.response.use(
     // NOT bounce the user to /login (the router itself decides that).
     const isMeProbe = url.endsWith('/auth/me')
 
-    if (status === 401 && !isMeProbe && location.hash.indexOf('#/login') === -1) {
-      const back = encodeURIComponent(location.hash.slice(1) || '/')
-      location.hash = `#/login?redirect=${back}`
+    if (status === 401 && !isMeProbe) {
+      // Lazy imports avoid the request.ts ⇄ router/store import cycle.
+      void redirectToLogin()
     }
     return Promise.reject(new ApiError(data?.code ?? status ?? -1, message))
   },
 )
+
+async function redirectToLogin() {
+  try {
+    const { default: router } = await import('@/router')
+    const { useAuthStore } = await import('@/stores/auth')
+    try {
+      const auth = useAuthStore()
+      auth.user = null
+      auth.ready = true
+    } catch {
+      /* pinia not yet installed */
+    }
+    const current = router.currentRoute.value
+    if (current.name !== 'login') {
+      await router.replace({
+        name: 'login',
+        query: { redirect: current.fullPath },
+      })
+    }
+  } catch {
+    // Last-resort fallback if router/store can't be loaded.
+    if (location.hash.indexOf('#/login') === -1) {
+      location.hash = '#/login'
+    }
+  }
+}
 
 /** Strongly-typed error so call sites can switch on numeric codes. */
 export class ApiError extends Error {

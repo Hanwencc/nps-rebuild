@@ -37,11 +37,18 @@ func init() {
 // init task from db
 func InitFromCsv() {
 	//Add a public password
-	if vkey := beego.AppConfig.String("public_vkey"); vkey != "" {
+	// Length gate: refuse to publish the shared "public client" with a
+	// weak vkey (the historical default was "123"). cmd/nps boot path
+	// already auto-rotates anything shorter than 16 chars, so this is
+	// a defence-in-depth check for hand-edited app_settings rows or
+	// older binaries that bypass the boot hook.
+	if vkey := beego.AppConfig.String("public_vkey"); len(vkey) >= 16 {
 		c := file.NewClient(vkey, true, true)
 		file.GetDb().NewClient(c)
 		RunList.Store(c.Id, nil)
 		//RunList[c.Id] = nil
+	} else if vkey != "" {
+		logs.Warn("public_vkey 长度 %d 不足 16，已忽略；公共客户端未启用", len(vkey))
 	}
 	//Initialize services in server-side files
 	file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
@@ -394,7 +401,7 @@ func GetDashboardData() map[string]interface{} {
 	data["version"] = version.VERSION
 	data["hostCount"] = common.GeSynctMapLen(file.GetDb().JsonDb.Hosts)
 	data["clientCount"] = common.GeSynctMapLen(file.GetDb().JsonDb.Clients)
-	if beego.AppConfig.String("public_vkey") != "" { //remove public vkey
+	if vkey := beego.AppConfig.String("public_vkey"); len(vkey) >= 16 { //remove public vkey from the visible count
 		data["clientCount"] = data["clientCount"].(int) - 1
 	}
 	dealClientData()

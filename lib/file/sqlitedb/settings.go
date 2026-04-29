@@ -184,6 +184,43 @@ func (s *Store) UpsertSettings(kv map[string]string) (applied int, rejected []st
 	return applied, rejected, nil
 }
 
+// DeleteSettings removes the given keys from app_settings inside a
+// single transaction. Bootstrap keys are silently skipped — they live
+// in nps.conf only and are never persisted here. Returns the number
+// of rows actually deleted.
+func (s *Store) DeleteSettings(keys ...string) (int, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+	tx, err := s.Writer.BeginTx(context.Background(), nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare(`DELETE FROM app_settings WHERE key=?`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+	deleted := 0
+	for _, k := range keys {
+		if k == "" || IsBootstrapKey(k) {
+			continue
+		}
+		res, err := stmt.Exec(k)
+		if err != nil {
+			return deleted, fmt.Errorf("delete setting %q: %w", k, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			deleted += int(n)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return deleted, nil
+}
+
 // BackfillOrLoadAppSettings is the startup reconciliation step. Same
 // contract as the other tables.
 //

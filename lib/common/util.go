@@ -2,6 +2,7 @@ package common
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"ehang.io/nps/lib/version"
 	"encoding/base64"
 	"encoding/binary"
@@ -71,7 +72,10 @@ func CheckAuth(r *http.Request, user, passwd string) bool {
 	if len(pair) != 2 {
 		return false
 	}
-	return pair[0] == user && pair[1] == passwd
+	// Constant-time compare avoids byte-by-byte timing oracles on
+	// HTTP / SOCKS5 Basic Auth credentials.
+	return subtle.ConstantTimeCompare([]byte(pair[0]), []byte(user)) == 1 &&
+		subtle.ConstantTimeCompare([]byte(pair[1]), []byte(passwd)) == 1
 }
 
 // get bool by str
@@ -97,9 +101,11 @@ func GetIntNoErrByStr(str string) int {
 	return i
 }
 
-// Get verify value
+// Get verify value (32-char hex digest of vkey, used as the bridge
+// handshake token). Backed by truncated SHA-256 since the MD5
+// hardening pass — wire format unchanged.
 func Getverifyval(vkey string) string {
-	return crypt.Md5(vkey)
+	return crypt.HashShort(vkey)
 }
 
 // Change headers and host of request

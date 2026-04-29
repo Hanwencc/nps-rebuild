@@ -277,14 +277,19 @@ func (c *ClientController) QuickInfo() {
 	bridgePort := server.Bridge.TunnelPort
 	bridgeType := beego.AppConfig.String("bridge_type")
 	tlsPort := beego.AppConfig.DefaultInt("tls_bridge_port", 8025)
+	// Surface the bridge cert fingerprint so the SPA can render the
+	// "TLS + pin" install command. Empty == operator never restarted
+	// after the C1 patch landed; UI degrades gracefully.
+	tlsFingerprint := beego.AppConfig.String("tls_cert_fingerprint")
 	c.ok(map[string]interface{}{
-		"id":         cli.Id,
-		"vkey":       cli.VerifyKey,
-		"remark":     cli.Remark,
-		"ip":         ip,
-		"bridgePort": bridgePort,
-		"bridgeType": bridgeType,
-		"tlsPort":    tlsPort,
+		"id":             cli.Id,
+		"vkey":           cli.VerifyKey,
+		"remark":         cli.Remark,
+		"ip":             ip,
+		"bridgePort":     bridgePort,
+		"bridgeType":     bridgeType,
+		"tlsPort":        tlsPort,
+		"tlsFingerprint": tlsFingerprint,
 	})
 }
 

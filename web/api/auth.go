@@ -137,8 +137,15 @@ func (c *AuthController) attemptLogin(username, password string) bool {
 		c.SetSession("isAdmin", true)
 		c.DelSession("clientId")
 		c.DelSession("username")
-		server.Bridge.Register.Store(common.GetIpByAddr(c.Ctx.Input.IP()),
-			time.Now().Add(2*time.Hour))
+		// Bridge.Register grants the caller's IP a 2h fast-path that
+		// skips per-vkey verification. The source MUST be the direct
+		// TCP peer — beego.Input.IP() honours X-Forwarded-For /
+		// X-Real-IP, which would let a CSRF / proxy-injection attacker
+		// pin an arbitrary victim IP into the trust map.
+		if peerIP, _, err := net.SplitHostPort(c.Ctx.Request.RemoteAddr); err == nil && peerIP != "" {
+			server.Bridge.Register.Store(common.GetIpByAddr(peerIP),
+				time.Now().Add(2*time.Hour))
+		}
 		return true
 	}
 	allowUser, _ := beego.AppConfig.Bool("allow_user_login")

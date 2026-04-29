@@ -1,10 +1,15 @@
 name: Release
 
+# Triggers:
+#   - workflow_dispatch: manual re-publish from any tag
+#   - release: published — fires for every published release. The
+#     `branches:` filter is NOT honoured by the release event and was
+#     removed; if you need to scope to specific tag patterns, gate the
+#     individual jobs with `if: startsWith(github.ref, 'refs/tags/v')`.
 on:
   workflow_dispatch:
   release:
     types: [published]
-    branches: [ master ]
 
 permissions:
   contents: write
@@ -23,12 +28,12 @@ jobs:
     steps:
 
       - name: Set up Go 1.x
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.22
+          go-version: '1.22'
         id: go
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Get dependencies
         run: |
           go get -v -t -d ./...

@@ -44,6 +44,7 @@ var (
 	ver            = flag.Bool("version", false, "show current version")
 	disconnectTime = flag.Int("disconnect_timeout", 60, "seconds without a mux ping return before the link is considered dead and reconnected")
 	tlsEnable      = flag.Bool("tls_enable", false, "enable tls")
+	tlsServerFp    = flag.String("tls_server_fingerprint", "", "Pin the NPS bridge cert (sha256 hex, optionally colon-separated). Empty = unsafe, no MITM protection.")
 )
 
 func main() {
@@ -236,6 +237,7 @@ func run() {
 	}
 	if *verifyKey != "" && *serverAddr != "" && *configPath == "" {
 		client.SetTlsEnable(*tlsEnable)
+		client.SetTlsServerFingerprint(*tlsServerFp)
 		logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), client.GetTlsEnable())
 
 		vkeys := strings.Split(*verifyKey, `,`)
@@ -352,6 +354,11 @@ func startNpcServer(startCmd string) {
 		tls = array[2]
 	}
 	go func() {
+		// startCmd does not carry the fingerprint pin (it would have to
+		// be added to the wire format used by `npc start ...`). Apply
+		// the process-wide flag instead so operators can still pin via
+		// the npc command line.
+		client.SetTlsServerFingerprint(*tlsServerFp)
 		for {
 			if tls == "-tls_enable=true" || tls == "true" {
 				client.SetTlsEnable(true)

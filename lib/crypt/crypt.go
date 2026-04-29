@@ -5,12 +5,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -60,23 +59,30 @@ func PKCS5UnPadding(origData []byte) (error, []byte) {
 	return nil, origData[:(length - unpadding)]
 }
 
-// Generate 32-bit MD5 strings
+// Generate 32-bit MD5 strings.
+//
+// Deprecated: only kept for callers outside the wire protocol that
+// need an MD5 hex digest. All security-relevant code paths must use
+// HashShort instead.
 func Md5(s string) string {
 	h := md5.New()
 	h.Write([]byte(s))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// Generating Random Verification Key
-func GetRandomString(l int) string {
-	str := "0123456789abcdefghijklmnopqrstuvwxyz"
-	bytes := []byte(str)
-	result := []byte{}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < l; i++ {
-		result = append(result, bytes[r.Intn(len(bytes))])
-	}
-	return string(result)
+// HashShort returns the SHA-256 digest of s truncated to 16 bytes
+// (128-bit preimage resistance) and hex-encoded as 32 lowercase
+// characters.
+//
+// The 32-character output is wire-compatible with the historical
+// MD5-hex format used by the bridge protocol (vkey verification,
+// version digest, secret/p2p tunnel password handshake), so callers
+// can drop-in replace crypt.Md5/common.Getverifyval without changing
+// the framed payload size. Both NPC and NPS must be upgraded
+// simultaneously — the byte values differ from the legacy MD5.
+func HashShort(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:16])
 }
 
 func GetVkey() string {

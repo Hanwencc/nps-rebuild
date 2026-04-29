@@ -33,6 +33,12 @@ type settingDescriptor struct {
 	Help           string   `json:"help,omitempty"`
 	NeedsRestart   bool     `json:"needsRestart"`   // port/IP/TLS — UI shows badge
 	Bootstrap      bool     `json:"bootstrap"`      // lives in nps.conf only
+	// ReadOnly marks fields whose value is computed by nps itself and
+	// re-overwritten on every boot. The Update endpoint silently
+	// rejects writes to these keys; the UI should render the input
+	// disabled. Example: tls_cert_fingerprint is derived from the
+	// on-disk server.pem and cannot be set by the operator.
+	ReadOnly       bool     `json:"readOnly"`
 }
 
 // settingsCatalog is the ordered, curated list of known nps.conf keys.
@@ -64,6 +70,7 @@ var settingsCatalog = []settingDescriptor{
 	{Key: "bridge_port", Label: "Bridge 端口", Group: "Bridge", Type: "int", NeedsRestart: true},
 	{Key: "tls_enable", Label: "启用 TLS", Group: "Bridge", Type: "bool", NeedsRestart: true, Help: "对新连接生效，已建立的隧道保留旧值"},
 	{Key: "tls_bridge_port", Label: "TLS Bridge 端口", Group: "Bridge", Type: "int", NeedsRestart: true},
+	{Key: "tls_cert_fingerprint", Label: "Bridge 证书指纹 (SHA-256)", Group: "Bridge", Type: "string", ReadOnly: true, Help: "由 conf/server.pem 自动计算，每次启动重新写入；NPC 需将此值填入 tls_server_fingerprint 以防御中间人攻击"},
 	{Key: "public_vkey", Label: "公共连接密钥", Group: "Bridge", Type: "password"},
 
 	// ----- http(s) proxy (Phase 6.2: all hot-applied via httpHostServer rebind) -----
@@ -84,8 +91,6 @@ var settingsCatalog = []settingDescriptor{
 	{Key: "pprof_port", Label: "pprof 端口", Group: "P2P / Debug", Type: "int", NeedsRestart: true},
 
 	// ----- access control -----
-	{Key: "auth_key", Label: "API auth_key", Group: "鉴权", Type: "password", Help: "旧版 md5 鉴权密钥；新部署建议改用 API Token"},
-	{Key: "auth_crypt_key", Label: "API AES 密钥", Group: "鉴权", Type: "password", Help: "16 字符固定长度"},
 	{Key: "ip_limit", Label: "限制 IP 访问", Group: "鉴权", Type: "bool"},
 	{Key: "allow_ports", Label: "允许的端口范围", Group: "鉴权", Type: "string", Help: "如 9001-9009,10001"},
 
@@ -188,7 +193,15 @@ func (c *SettingsController) Update() {
 	}
 	kv := make(map[string]string, len(raw))
 	for k, v := range raw {
-		kv[strings.TrimSpace(k)] = stringify(v)
+		k = strings.TrimSpace(k)
+		if isReadOnlySetting(k) {
+			// Drop silently — same contract as bootstrap keys. Logged
+			// so a curious operator can confirm why their edit didn't
+			// stick. Avoids a 4xx that would make the bulk save flow
+			// in the UI feel broken when only one key was rejected.
+			continue
+		}
+		kv[k] = stringify(v)
 	}
 	applied, rejected, err := store.UpsertSettings(kv)
 	if err != nil {
@@ -199,6 +212,18 @@ func (c *SettingsController) Update() {
 		"applied":  applied,
 		"rejected": rejected, // bootstrap keys silently dropped
 	})
+}
+
+// isReadOnlySetting returns true for catalog entries marked
+// ReadOnly:true. Linear scan is fine — the catalog is ~50 entries
+// long and Update() is not on a hot path.
+func isReadOnlySetting(key string) bool {
+	for _, d := range settingsCatalog {
+		if d.Key == key {
+			return d.ReadOnly
+		}
+	}
+	return false
 }
 
 func stringify(v interface{}) string {
