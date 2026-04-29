@@ -81,7 +81,11 @@ jobs:
           file: ${{ matrix.file }}
           # Multi-arch matrix. armv6/armv7/386 added per request; drop
           # any that fail to cross-compile in your Dockerfile.
-          platforms: linux/amd64,linux/386,linux/arm64,linux/arm/v6,linux/arm/v7
+          # gcr.io/distroless/static-debian12 publishes manifests for
+          # amd64, arm64, arm/v7, 386, ppc64le and s390x — but NOT arm/v6.
+          # Keep this list in sync with the distroless support matrix or
+          # buildx will fail with "no match for platform in manifest".
+          platforms: linux/amd64,linux/386,linux/arm64,linux/arm/v7
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
