@@ -51,6 +51,8 @@ func (c *DashboardController) Summary() {
 		"version":     version.VERSION,
 		"bridgeType":  str("bridgeType"),
 		"bridgePort":  beego.AppConfig.String("bridge_port"),
+		"tlsEnable":   beego.AppConfig.DefaultBool("tls_enable", false),
+		"tlsBridgePort": beego.AppConfig.DefaultInt("tls_bridge_port", 8025),
 		"serverIp":    str("serverIp"),
 		"p2pPort":     str("p2pPort"),
 		"logLevel":    str("logLevel"),

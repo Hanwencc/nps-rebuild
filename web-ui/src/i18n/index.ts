@@ -146,6 +146,8 @@ const messages = {
       serverInfo: '服务器信息',
       version: '版本',
       bridge: 'Bridge',
+      tlsOn: 'TLS 已开启',
+      tlsOff: 'TLS 未开启',
       userOnly: '当前为子用户视图，仪表盘统计仅管理员可见。',
     },
     global: {
@@ -322,6 +324,8 @@ const messages = {
       serverInfo: 'Server',
       version: 'Version',
       bridge: 'Bridge',
+      tlsOn: 'TLS enabled',
+      tlsOff: 'TLS disabled',
       userOnly: 'You are signed in as a sub-user; dashboard stats are admin-only.',
     },
     global: {

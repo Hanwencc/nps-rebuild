@@ -1,8 +1,33 @@
 /* Tailwind v4: single import drives both base + utilities */
 @import 'tailwindcss';
 
-/* Naive UI integrates via the runtime provider in App.vue, so no
-   theming import is needed here. We just smooth out the page chrome. */
+/* ============================================================
+   NPS Web UI — modern / tech theme
+   Naive UI components are themed via NConfigProvider in App.vue;
+   this file styles the page chrome that sits *outside* Naive.
+   ============================================================ */
+
+:root {
+  --nps-bg: #f5f7fb;
+  --nps-fg: #1f2937;
+  --nps-accent: #6366f1; /* indigo-500 */
+  --nps-accent-2: #06b6d4; /* cyan-500 */
+  --nps-grid: rgba(99, 102, 241, 0.06);
+  --nps-glow: rgba(99, 102, 241, 0.18);
+  --nps-card-bg: rgba(255, 255, 255, 0.72);
+  --nps-card-border: rgba(15, 23, 42, 0.06);
+}
+
+html.dark {
+  --nps-bg: #0b0d12;
+  --nps-fg: #e5e7eb;
+  --nps-accent: #818cf8; /* indigo-400 */
+  --nps-accent-2: #22d3ee; /* cyan-400 */
+  --nps-grid: rgba(129, 140, 248, 0.07);
+  --nps-glow: rgba(34, 211, 238, 0.18);
+  --nps-card-bg: rgba(20, 22, 30, 0.66);
+  --nps-card-border: rgba(255, 255, 255, 0.06);
+}
 
 html,
 body,
@@ -11,32 +36,128 @@ body,
   margin: 0;
   padding: 0;
   font-family:
-    'PingFang SC', 'Helvetica Neue', system-ui, -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, sans-serif;
-  background: #f5f7fb;
-  color: #1f2937;
+    'Inter', 'PingFang SC', 'Helvetica Neue', system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--nps-bg);
+  color: var(--nps-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* Dark scheme — toggled by App.vue via `prefs.dark`. Naive UI handles
-   its own components; this only fixes the page chrome that sits
-   outside Naive (body bg, plain Tailwind `text-gray-*` etc.). */
-html.dark,
-html.dark body,
-html.dark #app {
-  background: #101014;
-  color: #e5e7eb;
+/* Subtle tech background: radial accent glow + 32px grid lines.
+   Lives on body so layouts can sit on top transparently. */
+body {
+  background-image:
+    radial-gradient(
+      circle at 10% -10%,
+      var(--nps-glow) 0%,
+      transparent 45%
+    ),
+    radial-gradient(
+      circle at 110% 20%,
+      rgba(6, 182, 212, 0.12) 0%,
+      transparent 40%
+    ),
+    linear-gradient(var(--nps-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--nps-grid) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    32px 32px,
+    32px 32px;
+  background-attachment: fixed;
+}
+
+html.dark {
   color-scheme: dark;
 }
 
-html.dark .border-b,
-html.dark .border-t,
 html.dark .border,
+html.dark .border-t,
+html.dark .border-b,
 html.dark .border-l,
 html.dark .border-r {
-  border-color: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* ---------- Scrollbar ---------- */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 160, 0.28);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 130, 160, 0.55);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+/* ---------- Reusable utilities ---------- */
+.nps-glass {
+  background: var(--nps-card-bg) !important;
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border: 1px solid var(--nps-card-border) !important;
+}
+
+.nps-mono {
+  font-family:
+    'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.nps-gradient-text {
+  background: linear-gradient(
+    90deg,
+    var(--nps-accent) 0%,
+    var(--nps-accent-2) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nps-stat-card {
+  position: relative;
+  overflow: hidden;
+}
+.nps-stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--nps-accent),
+    var(--nps-accent-2)
+  );
+  opacity: 0.85;
+}
+.nps-stat-card .n-statistic-value__content {
+  font-family:
+    'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fancier focus ring on inputs/buttons across themes */
+.n-input--focus,
+.n-base-selection--focus {
+  box-shadow: 0 0 0 3px var(--nps-glow) !important;
 }

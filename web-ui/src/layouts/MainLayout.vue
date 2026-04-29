@@ -140,15 +140,11 @@ async function onUserMenu(key: string) {
       :collapsed="prefs.sidebarCollapsed"
       @update:collapsed="(v: boolean) => prefs.setSidebar(v)"
     >
-      <div class="flex items-center gap-2 px-4 h-14 border-b border-[var(--n-border-color)]">
-        <div
-          class="w-8 h-8 rounded-lg bg-indigo-600 text-white grid place-items-center font-bold"
-        >
-          N
-        </div>
+      <div class="nps-brand flex items-center gap-3 px-4 h-14">
+        <div class="nps-brand-logo">N</div>
         <span
           v-show="!prefs.sidebarCollapsed"
-          class="font-semibold"
+          class="font-semibold tracking-wide nps-gradient-text text-[15px]"
         >
           {{ t('app.title') }}
         </span>
@@ -167,11 +163,14 @@ async function onUserMenu(key: string) {
     <NLayout>
       <NLayoutHeader
         bordered
-        class="px-4 h-14 flex items-center justify-between"
+        class="px-5 h-14 flex items-center justify-between nps-header"
       >
-        <span class="text-sm opacity-70">
+        <span class="text-sm opacity-70 flex items-center gap-2">
+          <span class="nps-status-dot" />
           {{ t('app.welcome') }}
-          <span class="text-indigo-500 font-semibold">{{ auth.user?.username || '-' }}</span>
+          <span class="font-semibold nps-gradient-text">
+            {{ auth.user?.username || '-' }}
+          </span>
         </span>
         <NSpace align="center" :size="14">
           <NSwitch
@@ -202,3 +201,62 @@ async function onUserMenu(key: string) {
     </NLayout>
   </NLayout>
 </template>
+
+<style scoped>
+.nps-brand {
+  position: relative;
+  border-bottom: 1px solid var(--n-border-color);
+}
+.nps-brand::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--nps-accent),
+    var(--nps-accent-2),
+    transparent
+  );
+  opacity: 0.55;
+}
+.nps-brand-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  box-shadow:
+    0 6px 18px rgba(99, 102, 241, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.5px;
+}
+.nps-header {
+  position: relative;
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+}
+.nps-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+  animation: nps-pulse 2.4s ease-in-out infinite;
+}
+@keyframes nps-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.05);
+  }
+}
+</style>

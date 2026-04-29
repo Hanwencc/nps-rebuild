@@ -1,0 +1,1 @@
+import{af as a,ar as e,as as i,at as c}from"./index-ByVz0pZH.js";const l={list:t=>a("/clients",t),get:t=>a(`/clients/${t}`),create:t=>e("/clients",t),update:(t,s)=>c(`/clients/${t}`,s),remove:t=>i(`/clients/${t}`),changeStatus:(t,s)=>e(`/clients/${t}/status`,{status:s}),quickInfo:t=>a(`/clients/${t}/quickinfo`)};export{l as c};

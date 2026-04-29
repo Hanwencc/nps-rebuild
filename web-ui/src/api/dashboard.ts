@@ -21,6 +21,8 @@ export interface DashboardSummary {
   version: string
   bridgeType: string
   bridgePort: string
+  tlsEnable: boolean
+  tlsBridgePort: number
   serverIp: string
   p2pPort: string
   logLevel: string
@@ -39,7 +41,20 @@ export interface DashboardSummary {
 
   system: SystemStats
   load: string
-  history: Array<Record<string, unknown>>
+  history: Array<HistorySample>
+}
+
+export interface HistorySample {
+  cpu?: number
+  virtual_mem?: number
+  swap_mem?: number
+  load1?: number
+  load5?: number
+  load15?: number
+  io_send?: number
+  io_recv?: number
+  time?: string
+  [k: string]: unknown
 }
 
 export const dashboardApi = {
