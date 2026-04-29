@@ -203,12 +203,16 @@
 <script src="{{.web_base_url}}/static/js/toastr.min.js"></script>
 <script src="{{.web_base_url}}/static/js/echarts.min.js"></script>
 <script src="{{.web_base_url}}/static/js/nps-table.js"></script>
+<!-- language.js MUST load before LayoutContent: page scripts (e.g. table
+     formatters) call helpers like changeunit() inside AJAX callbacks that
+     can fire before deferred scripts finish loading. -->
+<script src="{{.web_base_url}}/static/js/language.js?v=202512054"></script>
 <script>
     window.nps = { "web_base_url": {{.web_base_url}} };
 </script>
 
     <!-- Page content -->
-    <main class="flex-1 p-5 nps-fadein">
+    <main class="flex-1 w-full nps-main nps-fadein">
         {{.LayoutContent}}
     </main>
 
@@ -219,8 +223,6 @@
     </footer>
 </div>
 
-<!-- language.js after content so langtag elements exist in DOM -->
-<script src="{{.web_base_url}}/static/js/language.js?v=202512054"></script>
 <script>
     /* Language dropdown: language.js appends to next() of #languagemenu */
     (function() {

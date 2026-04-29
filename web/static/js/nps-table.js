@@ -44,7 +44,13 @@
     NpsTable.prototype._build = function () {
         var self = this;
 
-        var $wrap = $('<div class="nps-table-wrap space-y-3">');
+        /* The host element is usually a <table>, whose default
+           display:table shrinks to content width. Force it to behave
+           like a full-width block so the rendered wrapper fills the
+           parent card on every viewport. */
+        self.$el.css({ display: 'block', width: '100%' });
+
+        var $wrap = $('<div class="nps-table-wrap space-y-3 w-full">');
 
         /* Top bar */
         var $topbar = $('<div class="flex flex-wrap items-center justify-between gap-2">');
@@ -188,8 +194,21 @@
                 if (typeof self.opts.onPostBody === 'function') {
                     self.opts.onPostBody.call(self.$el[0], data);
                 }
-                if (typeof $('body').setLang === 'function') {
-                    $('body').setLang('');
+                /* Re-translate freshly inserted langtag elements.
+                   Guard against the case where cloudLang()'s XML AJAX
+                   hasn't returned yet (window.languages not populated):
+                   calling setLang('') in that state would throw, leaving
+                   the table half-rendered on first page visit. */
+                if (typeof $('body').setLang === 'function'
+                    && window.languages
+                    && window.languages.menu
+                    && window.languages.current) {
+                    try { $('body').setLang('#' + self.$el.attr('id')); }
+                    catch (e) {
+                        if (window.console && console.warn) {
+                            console.warn('[nps-table] setLang failed:', e);
+                        }
+                    }
                 }
             },
             error: function () {
@@ -238,9 +257,20 @@
 
             $.each(visibleCols, function (ci, col) {
                 var val  = self._getVal(row, col.field);
-                var html = (typeof col.formatter === 'function')
-                    ? col.formatter(val, row, idx)
-                    : (val !== undefined && val !== null ? String(val) : '');
+                var html;
+                try {
+                    html = (typeof col.formatter === 'function')
+                        ? col.formatter(val, row, idx)
+                        : (val !== undefined && val !== null ? String(val) : '');
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[nps-table] formatter error on field "'
+                            + col.field + '":', e);
+                    }
+                    html = '<span class="text-red-500" title="'
+                        + (e && e.message ? String(e.message).replace(/"/g, '&quot;') : 'error')
+                        + '">!</span>';
+                }
                 var $td = $('<td class="px-4 py-3">');
                 if (col.align === 'center' || col.halign === 'center') $td.addClass('text-center');
                 $td.html(html);
