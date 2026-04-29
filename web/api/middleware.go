@@ -3,8 +3,10 @@ package api
 import (
 	"net"
 	"strings"
+	"time"
 
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/file/sqlitedb"
 	"github.com/astaxie/beego/logs"
 )
 
@@ -90,7 +92,12 @@ func (c *baseController) verifyApiToken() (*file.ApiToken, bool) {
 		return nil, false
 	}
 
-	tok, err := file.GetDb().FindApiTokenByKeyId(keyId)
+	store := sqlitedb.From(file.GetDb())
+	if store == nil {
+		logs.Warn("api-token verify: sqlite store unavailable")
+		return nil, false
+	}
+	tok, err := store.FindApiTokenByKeyId(keyId)
 	if err != nil {
 		return nil, false
 	}
@@ -107,9 +114,10 @@ func (c *baseController) verifyApiToken() (*file.ApiToken, bool) {
 		logs.Warn("api-token rejected: keyId=%s reason=%s ip=%s", keyId, err.Error(), ip)
 		return nil, false
 	}
-	if tok.Touch(ip) {
-		// Persist last-used metadata; cheap because Touch debounces 1/sec.
-		file.GetDb().UpdateApiToken(tok)
+	// Persist last-used metadata. Conditional UPDATE inside the store
+	// debounces writes to <=1/sec per (id, ip).
+	if err := store.TouchApiToken(tok.Id, ip, time.Now().Unix()); err != nil {
+		logs.Warn("api-token touch failed: keyId=%s err=%v", keyId, err)
 	}
 	return tok, true
 }

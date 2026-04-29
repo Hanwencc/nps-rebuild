@@ -43,6 +43,7 @@ function icon(name: string) {
     p2p: '<path d="M3 7h6v2H3zM3 11h10v2H3zM3 15h6v2H3zM15 7h6v2h-6zM15 11h6v2h-6zM15 15h6v2h-6z"/>',
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>',
     global: '<path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.03-.66-.07-.98l2.11-1.65a.49.49 0 0 0 .12-.61l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.03 7.03 0 0 0-1.7-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.18.58-1.7.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.61l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65a.49.49 0 0 0-.12.61l2 3.46c.14.24.43.34.69.22l2.49-1c.52.4 1.09.73 1.7.98l.38 2.65c.04.24.25.42.49.42h4c.24 0 .45-.18.49-.42l.38-2.65c.61-.25 1.18-.58 1.7-.98l2.49 1c.26.12.55.02.69-.22l2-3.46a.49.49 0 0 0-.12-.61l-2.11-1.65zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/>',
+    settings: '<path d="M3 4h18v2H3zM3 11h18v2H3zM3 18h18v2H3z"/>',
     tokens: '<path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5l-9-4zm-1 6h2v6h-2V7zm0 8h2v2h-2v-2z"/>',
   }
   return () =>
@@ -89,6 +90,7 @@ const menu = computed<MenuOption[]>(() => [
     key: 'g-system',
     children: [
       { label: t('nav.global'), key: 'global', icon: icon('global') },
+      { label: t('nav.settings'), key: 'settings', icon: icon('settings') },
       { label: t('nav.tokens'), key: 'tokens', icon: icon('tokens') },
     ],
   },

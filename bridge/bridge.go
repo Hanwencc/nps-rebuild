@@ -72,6 +72,20 @@ func NewTunnel(tunnelPort int, tunnelType string, ipVerify bool, runList sync.Ma
 	}
 }
 
+// SetIpVerify hot-applies the ip_limit setting. New connections will
+// see the new value; established tunnels keep whatever was active when
+// they were built.
+func (s *Bridge) SetIpVerify(b bool) {
+	s.ipVerify = b
+}
+
+// SetDisconnectTime hot-applies the disconnect_timeout setting. The
+// value is read by the ping loop on its next tick, so changes take
+// effect within a few seconds.
+func (s *Bridge) SetDisconnectTime(n int) {
+	s.disconnectTime = n
+}
+
 func (s *Bridge) StartTunnel() error {
 	go s.ping()
 	if s.tunnelType == "kcp" {

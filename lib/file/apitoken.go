@@ -159,17 +159,14 @@ func (s *DbUtils) NewApiToken(t *ApiToken) {
 		t.CreatedAt = time.Now().Unix()
 	}
 	s.JsonDb.ApiTokens.Store(t.Id, t)
-	s.JsonDb.StoreApiTokensToJsonFile()
 }
 
 func (s *DbUtils) UpdateApiToken(t *ApiToken) {
 	s.JsonDb.ApiTokens.Store(t.Id, t)
-	s.JsonDb.StoreApiTokensToJsonFile()
 }
 
 func (s *DbUtils) DelApiToken(id int) {
 	s.JsonDb.ApiTokens.Delete(id)
-	s.JsonDb.StoreApiTokensToJsonFile()
 }
 
 func (s *DbUtils) GetApiToken(id int) (*ApiToken, error) {

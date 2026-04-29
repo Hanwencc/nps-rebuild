@@ -23,7 +23,15 @@ var (
 	once sync.Once
 )
 
-// init csv from file
+// GetDb returns the singleton in-memory registry.
+//
+// Phase 7: legacy LoadXxxFromJsonFile helpers are still invoked here so
+// that, on a fresh install where SQLite tables are empty, any pre-Phase-7
+// JSON snapshot left in conf/ is migrated forward by the BackfillOrLoad*
+// path that cmd/nps runs immediately after opening SQLite. Once SQLite
+// has the data, those JSON files become irrelevant; the helpers tolerate
+// missing files gracefully (no panic) so deleting conf/*.json after the
+// first successful boot is safe.
 func GetDb() *DbUtils {
 	once.Do(func() {
 		jsonDb := NewJsonDb(common.GetRunPath())
@@ -108,25 +116,31 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 	}
 	t.Flow = new(Flow)
 	s.JsonDb.Tasks.Store(t.Id, t)
-	s.JsonDb.StoreTasksToJsonFile()
+	if !t.NoStore && s.JsonDb.TaskStore != nil {
+		_ = s.JsonDb.TaskStore.UpsertTask(t)
+	}
 	return
 }
 
 func (s *DbUtils) UpdateTask(t *Tunnel) error {
 	s.JsonDb.Tasks.Store(t.Id, t)
-	s.JsonDb.StoreTasksToJsonFile()
+	if !t.NoStore && s.JsonDb.TaskStore != nil {
+		_ = s.JsonDb.TaskStore.UpsertTask(t)
+	}
 	return nil
 }
 
 func (s *DbUtils) SaveGlobal(t *Glob) error {
 	s.JsonDb.Global = t
-	s.JsonDb.StoreGlobalToJsonFile()
+	s.JsonDb.FlushGlobalToStore()
 	return nil
 }
 
 func (s *DbUtils) DelTask(id int) error {
 	s.JsonDb.Tasks.Delete(id)
-	s.JsonDb.StoreTasksToJsonFile()
+	if s.JsonDb.TaskStore != nil {
+		_ = s.JsonDb.TaskStore.DeleteTask(id)
+	}
 	return nil
 }
 
@@ -153,7 +167,20 @@ func (s *DbUtils) GetTask(id int) (t *Tunnel, err error) {
 
 func (s *DbUtils) DelHost(id int) error {
 	s.JsonDb.Hosts.Delete(id)
-	s.JsonDb.StoreHostToJsonFile()
+	if s.JsonDb.HostStore != nil {
+		_ = s.JsonDb.HostStore.DeleteHost(id)
+	}
+	return nil
+}
+
+// UpdateHost persists in-place edits to a Host. The pointer is already
+// in s.JsonDb.Hosts (callers fetched it via GetHostById and mutated it),
+// so we just need to UPSERT it into SQLite.
+func (s *DbUtils) UpdateHost(h *Host) error {
+	s.JsonDb.Hosts.Store(h.Id, h)
+	if !h.NoStore && s.JsonDb.HostStore != nil {
+		return s.JsonDb.HostStore.UpsertHost(h)
+	}
 	return nil
 }
 
@@ -179,7 +206,9 @@ func (s *DbUtils) NewHost(t *Host) error {
 	}
 	t.Flow = new(Flow)
 	s.JsonDb.Hosts.Store(t.Id, t)
-	s.JsonDb.StoreHostToJsonFile()
+	if !t.NoStore && s.JsonDb.HostStore != nil {
+		_ = s.JsonDb.HostStore.UpsertHost(t)
+	}
 	return nil
 }
 
@@ -208,7 +237,9 @@ func (s *DbUtils) GetHost(start, length int, id int, search string) ([]*Host, in
 
 func (s *DbUtils) DelClient(id int) error {
 	s.JsonDb.Clients.Delete(id)
-	s.JsonDb.StoreClientsToJsonFile()
+	if s.JsonDb.ClientStore != nil {
+		return s.JsonDb.ClientStore.DeleteClient(id)
+	}
 	return nil
 }
 
@@ -241,7 +272,11 @@ reset:
 		c.Flow = new(Flow)
 	}
 	s.JsonDb.Clients.Store(c.Id, c)
-	s.JsonDb.StoreClientsToJsonFile()
+	if !c.NoStore && s.JsonDb.ClientStore != nil {
+		if err := s.JsonDb.ClientStore.UpsertClient(c); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -276,6 +311,9 @@ func (s *DbUtils) UpdateClient(t *Client) error {
 	if t.RateLimit == 0 {
 		t.Rate = rate.NewRate(0)
 		t.Rate.Start()
+	}
+	if !t.NoStore && s.JsonDb.ClientStore != nil {
+		return s.JsonDb.ClientStore.UpsertClient(t)
 	}
 	return nil
 }

@@ -83,3 +83,20 @@ func getTcpListener(ip, p string) (net.Listener, error) {
 	}
 	return net.ListenTCP("tcp", &net.TCPAddr{net.ParseIP(ip), port, ""})
 }
+
+// RefreshHttpPorts re-reads http/https proxy port from beego.AppConfig.
+// Used by the hot-restart path after the user changes
+// http_proxy_port / https_proxy_port via the settings UI.
+// Bridge / web ports are intentionally NOT refreshed — those are
+// surfaced as "needs restart" because pmux wiring would change.
+func RefreshHttpPorts() {
+	httpsPort = beego.AppConfig.String("https_proxy_port")
+	httpPort = beego.AppConfig.String("http_proxy_port")
+}
+
+// PMuxActive reports whether port-multiplexing is currently in use.
+// When true, hot-restart of HTTP/HTTPS/Web listeners is unsafe
+// (their listeners are sub-listeners of the pMux on bridge_port).
+func PMuxActive() bool {
+	return pMux != nil
+}

@@ -52,6 +52,8 @@ func Init() {
 		beego.NSRouter("/dashboard/summary", &api.DashboardController{}, "get:Summary"),
 		// global config
 		beego.NSRouter("/global", &api.GlobalController{}, "get:Get;put:Update"),
+		// app settings (mirrors nps.conf)
+		beego.NSRouter("/settings", &api.SettingsController{}, "get:Get;put:Update"),
 		// API tokens (multi-key + scope)
 		beego.NSRouter("/tokens", &api.TokenController{}, "get:List;post:Create"),
 		beego.NSRouter("/tokens/:id", &api.TokenController{},

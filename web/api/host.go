@@ -193,7 +193,10 @@ func (c *HostController) Update() {
 	if h.Scheme == "http" {
 		h.AutoHttps = false
 	}
-	file.GetDb().JsonDb.StoreHostToJsonFile()
+	if err := file.GetDb().UpdateHost(h); err != nil {
+		c.serverErr(err.Error())
+		return
+	}
 	c.okMsg("updated")
 }
 
@@ -241,6 +244,9 @@ func (c *HostController) ChangeStatus() {
 		return
 	}
 	h.IsClose = !p.Status
-	file.GetDb().JsonDb.StoreHostToJsonFile()
+	if err := file.GetDb().UpdateHost(h); err != nil {
+		c.serverErr(err.Error())
+		return
+	}
 	c.okMsg("updated")
 }

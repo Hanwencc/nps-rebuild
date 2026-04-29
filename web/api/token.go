@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/file/sqlitedb"
 )
 
 // TokenController exposes CRUD over file.ApiToken. Admin-only.
@@ -73,12 +74,31 @@ func (c *TokenController) requireAdmin() bool {
 	return true
 }
 
+// store returns the SQLite-backed api_tokens store, or nil after
+// emitting a 5xx response.
+func (c *TokenController) store() *sqlitedb.Store {
+	s := sqlitedb.From(file.GetDb())
+	if s == nil {
+		c.serverErr("sqlite store not initialised")
+		return nil
+	}
+	return s
+}
+
 // List GET /api/v1/tokens
 func (c *TokenController) List() {
 	if !c.requireAdmin() {
 		return
 	}
-	rows := file.GetDb().ListApiTokens()
+	s := c.store()
+	if s == nil {
+		return
+	}
+	rows, err := s.ListApiTokens()
+	if err != nil {
+		c.serverErr(err.Error())
+		return
+	}
 	out := make([]tokenPayload, 0, len(rows))
 	for _, t := range rows {
 		out = append(out, toTokenPayload(t))
@@ -96,7 +116,11 @@ func (c *TokenController) Get() {
 		c.badRequest("invalid id")
 		return
 	}
-	t, err := file.GetDb().GetApiToken(id)
+	s := c.store()
+	if s == nil {
+		return
+	}
+	t, err := s.GetApiToken(id)
 	if err != nil {
 		c.notFound(err.Error())
 		return
@@ -145,7 +169,14 @@ func (c *TokenController) Create() {
 	t.SecretHash = hash
 	t.CreatedAt = time.Now().Unix()
 
-	file.GetDb().NewApiToken(t)
+	s := c.store()
+	if s == nil {
+		return
+	}
+	if err := s.NewApiToken(t); err != nil {
+		c.serverErr("insert api_token failed: " + err.Error())
+		return
+	}
 
 	c.ok(map[string]interface{}{
 		"token":  toTokenPayload(t),
@@ -163,7 +194,11 @@ func (c *TokenController) Update() {
 		c.badRequest("invalid id")
 		return
 	}
-	t, err := file.GetDb().GetApiToken(id)
+	s := c.store()
+	if s == nil {
+		return
+	}
+	t, err := s.GetApiToken(id)
 	if err != nil {
 		c.notFound(err.Error())
 		return
@@ -176,7 +211,10 @@ func (c *TokenController) Update() {
 		}
 	}
 	applyTokenWrite(t, &req)
-	file.GetDb().UpdateApiToken(t)
+	if err := s.UpdateApiToken(t); err != nil {
+		c.serverErr("update api_token failed: " + err.Error())
+		return
+	}
 	c.ok(toTokenPayload(t))
 }
 
@@ -190,11 +228,18 @@ func (c *TokenController) Delete() {
 		c.badRequest("invalid id")
 		return
 	}
-	if _, err := file.GetDb().GetApiToken(id); err != nil {
+	s := c.store()
+	if s == nil {
+		return
+	}
+	if _, err := s.GetApiToken(id); err != nil {
 		c.notFound(err.Error())
 		return
 	}
-	file.GetDb().DelApiToken(id)
+	if err := s.DelApiToken(id); err != nil {
+		c.serverErr("delete api_token failed: " + err.Error())
+		return
+	}
 	c.okMsg("deleted")
 }
 
@@ -211,7 +256,11 @@ func (c *TokenController) Rotate() {
 		c.badRequest("invalid id")
 		return
 	}
-	t, err := file.GetDb().GetApiToken(id)
+	s := c.store()
+	if s == nil {
+		return
+	}
+	t, err := s.GetApiToken(id)
 	if err != nil {
 		c.notFound(err.Error())
 		return
@@ -227,7 +276,10 @@ func (c *TokenController) Rotate() {
 		return
 	}
 	t.SecretHash = hash
-	file.GetDb().UpdateApiToken(t)
+	if err := s.UpdateApiToken(t); err != nil {
+		c.serverErr("rotate api_token failed: " + err.Error())
+		return
+	}
 	c.ok(map[string]interface{}{
 		"token":  toTokenPayload(t),
 		"secret": secret,

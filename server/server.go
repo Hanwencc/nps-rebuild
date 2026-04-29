@@ -480,6 +480,12 @@ func GetDashboardData() map[string]interface{} {
 }
 
 // 实例化流量数据到文件
+//
+// Phase 7: legacy JSON file persistence has been removed; SQLite is the
+// sole store and CRUD paths dual-write on every change. The periodic
+// flush only re-syncs the admin-managed fields (UPSERT all rows) as a
+// safety net in case any code path mutates an in-memory object without
+// going through DbUtils. Runtime Flow counters remain in-memory only.
 func flowSession(m time.Duration) {
 	once.Do(func() {
 		ticker := time.NewTicker(m)
@@ -487,10 +493,10 @@ func flowSession(m time.Duration) {
 		for {
 			select {
 			case <-ticker.C:
-				file.GetDb().JsonDb.StoreHostToJsonFile()
-				file.GetDb().JsonDb.StoreTasksToJsonFile()
-				file.GetDb().JsonDb.StoreClientsToJsonFile()
-				file.GetDb().JsonDb.StoreGlobalToJsonFile()
+				file.GetDb().JsonDb.FlushHostsToStore()
+				file.GetDb().JsonDb.FlushTasksToStore()
+				file.GetDb().JsonDb.FlushClientsToStore()
+				file.GetDb().JsonDb.FlushGlobalToStore()
 			}
 		}
 	})

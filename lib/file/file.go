@@ -3,8 +3,6 @@ package file
 import (
 	"encoding/json"
 	"errors"
-	"github.com/astaxie/beego/logs"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -22,6 +20,7 @@ func NewJsonDb(runPath string) *JsonDb {
 		ClientFilePath:   filepath.Join(runPath, "conf", "clients.json"),
 		GlobalFilePath:   filepath.Join(runPath, "conf", "global.json"),
 		ApiTokenFilePath: filepath.Join(runPath, "conf", "api_tokens.json"),
+		SqliteFilePath:   filepath.Join(runPath, "conf", "nps.db"),
 	}
 }
 
@@ -42,6 +41,51 @@ type JsonDb struct {
 	ClientFilePath   string //client file path
 	GlobalFilePath   string //global file path
 	ApiTokenFilePath string //api token file path
+	SqliteFilePath   string //sqlite db file path (phase 0+ of JSON->SQLite migration)
+	// SQLite is the opaque handle for the optional SQLite store. Type is
+	// `any` so that this package does not import the sqlite driver,
+	// keeping `npc` (which embeds `lib/file` only for its data models)
+	// free of the modernc.org/sqlite + libc transitive dependency.
+	// The server entrypoint (cmd/nps) populates this with a
+	// *lib/file/sqlitedb.Store at startup.
+	SQLite any
+	// ClientStore, when non-nil, makes Client CRUD dual-write to a
+	// persistence backend (typically SQLite). The in-memory sync.Map
+	// remains the runtime registry; this hook only persists the
+	// admin-managed subset of fields. Populated by cmd/nps after the
+	// SQLite store is opened. nil for npc and during early startup.
+	ClientStore ClientPersister
+	// TaskStore is the analogous hook for the Tasks (Tunnel) table.
+	TaskStore TaskPersister
+	// HostStore is the analogous hook for the Hosts table.
+	HostStore HostPersister
+	// GlobalStore is the analogous hook for the singleton Glob record.
+	GlobalStore GlobalPersister
+}
+
+// ClientPersister is the persistence hook used by Client CRUD in db.go.
+// Defined in lib/file (rather than in lib/file/sqlitedb) so that the
+// dual-write logic does not pull the sqlite driver into npc.
+type ClientPersister interface {
+	UpsertClient(*Client) error
+	DeleteClient(id int) error
+}
+
+// TaskPersister mirrors ClientPersister for the Tunnel (tasks) table.
+type TaskPersister interface {
+	UpsertTask(*Tunnel) error
+	DeleteTask(id int) error
+}
+
+// HostPersister mirrors ClientPersister for the Host table.
+type HostPersister interface {
+	UpsertHost(*Host) error
+	DeleteHost(id int) error
+}
+
+// GlobalPersister mirrors ClientPersister for the singleton Glob record.
+type GlobalPersister interface {
+	UpsertGlobal(*Glob) error
 }
 
 func (s *JsonDb) LoadTaskFromJsonFile() {
@@ -135,42 +179,77 @@ func (s *JsonDb) GetClient(id int) (c *Client, err error) {
 
 var hostLock sync.Mutex
 
-func (s *JsonDb) StoreHostToJsonFile() {
+// FlushHostsToStore performs an UPSERT for every Host in the in-memory
+// registry against the configured HostStore (SQLite). It is a no-op when
+// no store is wired (e.g. early startup or npc).
+//
+// Phase 7: JSON write paths have been removed; SQLite is the sole
+// persistence layer. Call sites that previously wrote conf/hosts.json
+// now invoke this helper instead.
+func (s *JsonDb) FlushHostsToStore() {
 	hostLock.Lock()
-	storeSyncMapToFile(s.Hosts, s.HostFilePath)
-	hostLock.Unlock()
+	defer hostLock.Unlock()
+	if s.HostStore == nil {
+		return
+	}
+	s.Hosts.Range(func(_, value interface{}) bool {
+		h, ok := value.(*Host)
+		if !ok || h == nil || h.NoStore {
+			return true
+		}
+		_ = s.HostStore.UpsertHost(h)
+		return true
+	})
 }
 
 var taskLock sync.Mutex
 
-func (s *JsonDb) StoreTasksToJsonFile() {
+// FlushTasksToStore is the Tunnel equivalent of FlushHostsToStore.
+func (s *JsonDb) FlushTasksToStore() {
 	taskLock.Lock()
-	storeSyncMapToFile(s.Tasks, s.TaskFilePath)
-	taskLock.Unlock()
+	defer taskLock.Unlock()
+	if s.TaskStore == nil {
+		return
+	}
+	s.Tasks.Range(func(_, value interface{}) bool {
+		t, ok := value.(*Tunnel)
+		if !ok || t == nil || t.NoStore {
+			return true
+		}
+		_ = s.TaskStore.UpsertTask(t)
+		return true
+	})
 }
 
 var clientLock sync.Mutex
 
-func (s *JsonDb) StoreClientsToJsonFile() {
+// FlushClientsToStore is the Client equivalent of FlushHostsToStore.
+func (s *JsonDb) FlushClientsToStore() {
 	clientLock.Lock()
-	storeSyncMapToFile(s.Clients, s.ClientFilePath)
-	clientLock.Unlock()
+	defer clientLock.Unlock()
+	if s.ClientStore == nil {
+		return
+	}
+	s.Clients.Range(func(_, value interface{}) bool {
+		c, ok := value.(*Client)
+		if !ok || c == nil || c.NoStore {
+			return true
+		}
+		_ = s.ClientStore.UpsertClient(c)
+		return true
+	})
 }
 
 var globalLock sync.Mutex
 
-func (s *JsonDb) StoreGlobalToJsonFile() {
+// FlushGlobalToStore is the Glob singleton equivalent of FlushHostsToStore.
+func (s *JsonDb) FlushGlobalToStore() {
 	globalLock.Lock()
-	storeGlobalToFile(s.Global, s.GlobalFilePath)
-	globalLock.Unlock()
-}
-
-var apiTokenLock sync.Mutex
-
-func (s *JsonDb) StoreApiTokensToJsonFile() {
-	apiTokenLock.Lock()
-	storeSyncMapToFile(s.ApiTokens, s.ApiTokenFilePath)
-	apiTokenLock.Unlock()
+	defer globalLock.Unlock()
+	if s.GlobalStore == nil || s.Global == nil {
+		return
+	}
+	_ = s.GlobalStore.UpsertGlobal(s.Global)
 }
 
 func (s *JsonDb) GetClientId() int32 {
@@ -185,106 +264,35 @@ func (s *JsonDb) GetHostId() int32 {
 	return atomic.AddInt32(&s.HostIncreaseId, 1)
 }
 
+// loadSyncMapFromFile reads a legacy newline-delimited JSON snapshot
+// (conf/clients.json, conf/tasks.json, conf/hosts.json, conf/api_tokens.json).
+// Phase 7: these files are no longer written and may not exist; missing
+// or empty files are silently ignored — SQLite is the source of truth
+// at runtime, so an empty in-memory map at startup just means SQLite
+// will populate it via BackfillOrLoad*.
 func loadSyncMapFromFile(filePath string, f func(value string)) {
+	if !common.FileExists(filePath) {
+		return
+	}
 	b, err := common.ReadAllFromFile(filePath)
 	if err != nil {
-		panic(err)
+		return
 	}
 	for _, v := range strings.Split(string(b), "\n"+common.CONN_DATA_SEQ) {
 		f(v)
 	}
 }
 
+// loadSyncMapFromFileWithSingleJson reads a legacy single-document JSON
+// file (conf/global.json). Same Phase-7 semantics as loadSyncMapFromFile:
+// missing or unreadable files are ignored.
 func loadSyncMapFromFileWithSingleJson(filePath string, f func(value string)) {
 	if !common.FileExists(filePath) {
 		return
 	}
-
 	b, err := common.ReadAllFromFile(filePath)
 	if err != nil {
-		panic(err)
+		return
 	}
-
 	f(string(b))
-}
-
-func storeSyncMapToFile(m sync.Map, filePath string) {
-	file, err := os.Create(filePath + ".tmp")
-	// first create a temporary file to store
-	if err != nil {
-		panic(err)
-	}
-	m.Range(func(key, value interface{}) bool {
-		var b []byte
-		var err error
-		switch value.(type) {
-		case *Tunnel:
-			obj := value.(*Tunnel)
-			if obj.NoStore {
-				return true
-			}
-			b, err = json.Marshal(obj)
-		case *Host:
-			obj := value.(*Host)
-			if obj.NoStore {
-				return true
-			}
-			b, err = json.Marshal(obj)
-		case *Client:
-			obj := value.(*Client)
-			if obj.NoStore {
-				return true
-			}
-			b, err = json.Marshal(obj)
-		case *ApiToken:
-			b, err = json.Marshal(value.(*ApiToken))
-		//case *Glob:
-		//	obj := value.(*Glob)
-		//	b, err = json.Marshal(obj)
-		default:
-			return true
-		}
-		if err != nil {
-			return true
-		}
-		_, err = file.Write(b)
-		if err != nil {
-			panic(err)
-		}
-		_, err = file.Write([]byte("\n" + common.CONN_DATA_SEQ))
-		if err != nil {
-			panic(err)
-		}
-		return true
-	})
-	_ = file.Sync()
-	_ = file.Close()
-	// must close file first, then rename it
-	err = os.Rename(filePath+".tmp", filePath)
-	if err != nil {
-		logs.Error(err, "store to file err, data will lost")
-	}
-	// replace the file, maybe provides atomic operation
-}
-
-func storeGlobalToFile(m *Glob, filePath string) {
-	file, err := os.Create(filePath + ".tmp")
-	// first create a temporary file to store
-	if err != nil {
-		panic(err)
-	}
-
-	var b []byte
-	b, err = json.Marshal(m)
-	_, err = file.Write(b)
-	if err != nil {
-		panic(err)
-	}
-	_ = file.Sync()
-	_ = file.Close()
-	// must close file first, then rename it
-	err = os.Rename(filePath+".tmp", filePath)
-	if err != nil {
-		logs.Error(err, "store to file err, data will lost")
-	}
 }

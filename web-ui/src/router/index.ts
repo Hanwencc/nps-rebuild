@@ -52,6 +52,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/GlobalView.vue'),
       },
       {
+        path: 'settings',
+        name: 'settings',
+        component: () => import('@/views/SettingsView.vue'),
+      },
+      {
         path: 'tokens',
         name: 'tokens',
         component: () => import('@/views/TokenListView.vue'),

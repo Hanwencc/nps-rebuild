@@ -204,7 +204,10 @@ func (c *ClientController) Update() {
 	}
 	cli.Rate.Start()
 
-	file.GetDb().JsonDb.StoreClientsToJsonFile()
+	if err := file.GetDb().UpdateClient(cli); err != nil {
+		c.serverErr(err.Error())
+		return
+	}
 	c.okMsg("updated")
 }
 
@@ -250,7 +253,10 @@ func (c *ClientController) ChangeStatus() {
 	if !p.Status {
 		server.DelClientConnect(cli.Id)
 	}
-	file.GetDb().JsonDb.StoreClientsToJsonFile()
+	if err := file.GetDb().UpdateClient(cli); err != nil {
+		c.serverErr(err.Error())
+		return
+	}
 	c.okMsg("updated")
 }
 

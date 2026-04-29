@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/file/sqlitedb"
 	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server/connection"
@@ -421,6 +422,92 @@ func (p *nps) run() error {
 
 func run() {
 	routers.Init()
+	// Phase 0 of JSON->SQLite migration: open the embedded SQLite store.
+	// Done here (server entrypoint) rather than in lib/file so npc does
+	// not link in modernc.org/sqlite + libc.
+	if store, err := sqlitedb.Open(file.GetDb().JsonDb.SqliteFilePath); err != nil {
+		logs.Error("open sqlite store at %s failed: %v", file.GetDb().JsonDb.SqliteFilePath, err)
+	} else {
+		file.GetDb().JsonDb.SQLite = store
+		// Phase 1: api_tokens — backfill from api_tokens.json on first
+		// boot. Subsequent boots are no-ops (table not empty).
+		if n, err := store.BackfillApiTokens(file.GetDb().ListApiTokens()); err != nil {
+			logs.Error("backfill api_tokens failed: %v", err)
+		} else if n > 0 {
+			logs.Info("api_tokens: migrated %d row(s) from api_tokens.json into SQLite", n)
+		}
+		// Phase 2: clients — either backfill from clients.json on first
+		// boot, or REPLACE the in-memory map with rows from SQLite on
+		// subsequent boots (SQLite is source of truth).
+		if mode, n, err := store.BackfillOrLoadClients(file.GetDb().JsonDb); err != nil {
+			logs.Error("clients %s failed: %v", mode, err)
+		} else {
+			switch mode {
+			case "backfill":
+				logs.Info("clients: migrated %d row(s) from clients.json into SQLite", n)
+			case "load":
+				logs.Info("clients: loaded %d row(s) from SQLite", n)
+			}
+		}
+		// Phase 3: tasks — same contract as clients. MUST run AFTER
+		// clients so the Client pointer can be resolved by id.
+		if mode, n, err := store.BackfillOrLoadTasks(file.GetDb().JsonDb); err != nil {
+			logs.Error("tasks %s failed: %v", mode, err)
+		} else {
+			switch mode {
+			case "backfill":
+				logs.Info("tasks: migrated %d row(s) from tasks.json into SQLite", n)
+			case "load":
+				logs.Info("tasks: loaded %d row(s) from SQLite", n)
+			}
+		}
+		// Phase 4: hosts — same contract; also depends on clients.
+		if mode, n, err := store.BackfillOrLoadHosts(file.GetDb().JsonDb); err != nil {
+			logs.Error("hosts %s failed: %v", mode, err)
+		} else {
+			switch mode {
+			case "backfill":
+				logs.Info("hosts: migrated %d row(s) from hosts.json into SQLite", n)
+			case "load":
+				logs.Info("hosts: loaded %d row(s) from SQLite", n)
+			}
+		}
+		// Phase 5: global — singleton Glob record.
+		if mode, n, err := store.BackfillOrLoadGlobal(file.GetDb().JsonDb); err != nil {
+			logs.Error("global %s failed: %v", mode, err)
+		} else {
+			switch mode {
+			case "backfill":
+				logs.Info("global: migrated %d row(s) from global.json into SQLite", n)
+			case "load":
+				logs.Info("global: loaded %d row(s) from SQLite", n)
+			}
+		}
+		// Phase 6.1: app_settings — mirror nps.conf into SQLite. On
+		// first boot we copy every non-bootstrap key from the in-memory
+		// beego.AppConfig (just loaded from nps.conf); on subsequent
+		// boots SQLite is the source of truth and we push values back
+		// into beego.AppConfig so existing call sites read them
+		// transparently.
+		if mode, n, err := store.BackfillOrLoadAppSettings(file.GetDb().JsonDb); err != nil {
+			logs.Error("app_settings %s failed: %v", mode, err)
+		} else {
+			switch mode {
+			case "backfill":
+				logs.Info("app_settings: migrated %d row(s) from nps.conf into SQLite", n)
+			case "load":
+				logs.Info("app_settings: applied %d row(s) from SQLite onto beego.AppConfig", n)
+			}
+		}
+		registerSettingsHotHooks()
+		// Wire the persistence hook so all subsequent Client CRUD
+		// dual-writes through SQLite. Must happen AFTER backfill/load
+		// so the bulk import does not recurse via UpsertClient.
+		file.GetDb().JsonDb.ClientStore = store
+		file.GetDb().JsonDb.TaskStore = store
+		file.GetDb().JsonDb.HostStore = store
+		file.GetDb().JsonDb.GlobalStore = store
+	}
 	task := &file.Tunnel{
 		Mode: "webServer",
 	}
@@ -443,4 +530,7 @@ func run() {
 		timeout = 60
 	}
 	go server.StartNewServer(bridgePort, task, beego.AppConfig.String("bridge_type"), timeout)
+	// Adopt the implicit httpHostServer once StartNewServer publishes
+	// it at RunList[0]; needed for HTTP/HTTPS proxy hot-restart.
+	adoptInitialHttpHostServer()
 }
