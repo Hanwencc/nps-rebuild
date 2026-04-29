@@ -1,15 +1,13 @@
 module npc-gui
 
-go 1.24.0
-
-toolchain go1.24.9
+go 1.25.0
 
 require (
 	ehang.io/nps v0.0.0-00010101000000-000000000000
 	github.com/astaxie/beego v1.12.3
 	github.com/energye/systray v1.0.2
 	github.com/wailsapp/wails/v2 v2.11.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.42.0
 )
 
 // 使用本地路径替代依赖

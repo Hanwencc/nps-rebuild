@@ -15,7 +15,6 @@
 
 ARG GO_VERSION=1.25
 ARG NODE_VERSION=20
-ARG ALPINE_VERSION=3.20
 
 # ---------- 1. frontend ----------------------------------------------------
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS frontend
@@ -35,7 +34,7 @@ RUN yarn build
 # BUILDPLATFORM keeps the compiler running on the native arch of the
 # build host while cross-compiling to TARGETPLATFORM — much faster than
 # QEMU-emulating the whole `go build`.
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
