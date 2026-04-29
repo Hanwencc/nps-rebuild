@@ -2,6 +2,18 @@ export GOPROXY=direct
 
 sudo apt-get update
 sudo apt-get install gcc-mingw-w64-i686 gcc-multilib
+
+# ---------- frontend (Vue 3 SPA) ----------------------------------------
+# The web admin UI is embedded into the nps server binary via
+# //go:embed all:dist in web/webui/embed.go. Build it here so every
+# server tarball ships the latest assets without requiring a fresh
+# checkout to commit dist/. Skipped if yarn is unavailable (local dev).
+if command -v yarn >/dev/null 2>&1; then
+  pushd web-ui >/dev/null
+  yarn install --frozen-lockfile
+  yarn build
+  popd >/dev/null
+fi
 env GOOS=windows GOARCH=386 CGO_ENABLED=1 CC=i686-w64-mingw32-gcc go build -ldflags "-s -w -extldflags -static -extldflags -static" -buildmode=c-shared -o npc_sdk.dll cmd/npc/sdk.go
 env GOOS=linux GOARCH=386 CGO_ENABLED=1 CC=gcc go build -ldflags "-s -w -extldflags -static -extldflags -static" -buildmode=c-shared -o npc_sdk.so cmd/npc/sdk.go
 tar -czvf npc_sdk.tar.gz npc_sdk.dll npc_sdk.so npc_sdk.h

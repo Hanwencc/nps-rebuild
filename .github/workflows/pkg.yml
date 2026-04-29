@@ -29,6 +29,16 @@ jobs:
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
+      - name: Set up Node.js
+        # Required by build.assets.sh which runs `yarn build` inside
+        # web-ui/ to refresh the embedded admin SPA before `go build`.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: yarn
+          cache-dependency-path: web-ui/yarn.lock
+      - name: Enable Yarn (corepack)
+        run: corepack enable
       - name: Set up Go 1.x
         uses: actions/setup-go@v5
         with:
