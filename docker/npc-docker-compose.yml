@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  npc:
+    image: yisier1/npc
+    container_name: npc
+    restart: always
+    network_mode: host
+    command:
+      - -server=221.194.148.82:6003
+      - -vkey=5zrkjijen46okf75k6gf1s205

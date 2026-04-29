@@ -1,5 +1,11 @@
-<div class="page-error tile">
-    <h1><i class="fa fa-exclamation-circle"></i> Error 404: Page not found</h1>
-    <p>The page you have requested is not found.</p>
-    <p><a class="btn btn-primary" href="javascript:window.history.back();">Go Back</a></p>
+<div class="flex flex-col items-center justify-center py-24 text-center">
+    <div class="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mb-4">
+        <i class="fa fa-exclamation-circle text-red-500 text-2xl"></i>
+    </div>
+    <h1 class="text-2xl font-bold text-gray-800 mb-2">Error 404</h1>
+    <p class="text-gray-500 mb-6">The page you have requested is not found.</p>
+    <a href="javascript:window.history.back();"
+       class="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-colors">
+        <i class="fa fa-arrow-left"></i> Go Back
+    </a>
 </div>

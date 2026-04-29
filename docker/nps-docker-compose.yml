@@ -1,0 +1,11 @@
+version: "3.8"
+services:
+  nps:
+    image: yisier1/nps
+    container_name: nps
+    restart: always
+    network_mode: host
+    volumes:
+      # 替换下面的 /path/to/host/conf 为本机的 conf 目录路径
+      - ./conf:/conf
+      - /etc/localtime:/etc/localtime:ro

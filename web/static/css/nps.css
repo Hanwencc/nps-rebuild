@@ -1,0 +1,76 @@
+/* NPS Admin — Tailwind theme overrides */
+
+/* Toastr position */
+#toast-container { z-index: 99999; }
+#toast-container > div { border-radius: 0.75rem !important; box-shadow: 0 4px 12px rgba(0,0,0,.12) !important; }
+
+/* Inline code blocks */
+code {
+    padding: 0.15em 0.45em;
+    background: #f1f5f9;
+    color: #334155;
+    border-radius: 0.375rem;
+    font-size: 0.78em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Action button group in table cells */
+.nps-btn-group { display: inline-flex; gap: 0.25rem; align-items: center; }
+
+/* Copy button */
+button.copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.7rem;
+    border-radius: 0.375rem;
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: none;
+    cursor: pointer;
+    margin-left: 0.35rem;
+    transition: background .15s;
+}
+button.copy:hover { background: #bfdbfe; }
+
+/* Progress bar (dashboard) */
+.nps-progress {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 9999px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+.nps-progress-bar {
+    height: 100%;
+    background: #6366f1;
+    border-radius: 9999px;
+    transition: width 0.5s ease;
+}
+
+/* Language dropdown li */
+#languagedropdown li { list-style: none; }
+#languagedropdown li a {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    color: #374151;
+    cursor: pointer;
+    transition: background .12s;
+    border-radius: 0.375rem;
+}
+#languagedropdown li a:hover { background: #f1f5f9; }
+#languagedropdown li a img { width: 18px; height: 12px; object-fit: cover; border-radius: 2px; }
+
+/* Sidebar active */
+.sidebar-active {
+    background: #4f46e5 !important;
+    color: #fff !important;
+}
+
+/* Fade-in animation */
+@keyframes fadeInUp { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform: translateY(0); } }
+.nps-fadein { animation: fadeInUp .25s ease; }
