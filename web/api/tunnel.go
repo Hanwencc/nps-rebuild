@@ -28,6 +28,11 @@ type tunnelPayload struct {
 	LocalPath    string `json:"localPath"`
 	StripPre     string `json:"stripPre"`
 	ProtoVersion string `json:"protoVersion"`
+	// Username — Phase 9 shared SOCKS5 gateway routing key. Required
+	// for mode="socks5"; ignored for everything else. The combination
+	// (Username, Password) must be unique across all enabled socks5
+	// tasks; the API enforces that on Create / Update.
+	Username string `json:"username"`
 }
 
 func (c *TunnelController) decode(target interface{}) bool {
@@ -138,6 +143,7 @@ func (c *TunnelController) Create() {
 		Status:       true,
 		Remark:       p.Remark,
 		Password:     p.Password,
+		Username:     p.Username,
 		LocalPath:    p.LocalPath,
 		StripPre:     p.StripPre,
 		ProtoVersion: p.ProtoVersion,
@@ -145,10 +151,25 @@ func (c *TunnelController) Create() {
 		Client:       cli,
 		Flow:         &file.Flow{},
 	}
-	if t.Port <= 0 {
+	if t.Mode == "socks5" {
+		// Phase 9: socks5 tasks are routing entries for the shared
+		// gateway. Port / ServerIp are intentionally ignored, but we
+		// must guarantee a unique (username, password) pair so the
+		// gateway has an unambiguous match.
+		t.Port = 0
+		t.ServerIp = ""
+		if t.Username == "" {
+			c.badRequest("socks5 username is required")
+			return
+		}
+		if !checkSocks5RouteUnique(t.Username, t.Password, 0) {
+			c.badRequest("socks5 username/password is already in use")
+			return
+		}
+	} else if t.Port <= 0 {
 		t.Port = tool.GenerateServerPort(t.Mode)
 	}
-	if t.Mode != "secret" && t.Mode != "p2p" {
+	if t.Mode != "secret" && t.Mode != "p2p" && t.Mode != "socks5" {
 		if !tool.TestServerPort(t.Port, t.Mode) {
 			c.badRequest("the port cannot be opened (occupied or not allowed)")
 			return
@@ -202,7 +223,7 @@ func (c *TunnelController) Update() {
 		if t.Port <= 0 {
 			t.Port = tool.GenerateServerPort(t.Mode)
 		}
-		if t.Mode != "secret" && t.Mode != "p2p" {
+		if t.Mode != "secret" && t.Mode != "p2p" && t.Mode != "socks5" {
 			if !tool.TestServerPort(t.Port, t.Mode) {
 				c.badRequest("the port cannot be opened (occupied or not allowed)")
 				return
@@ -217,10 +238,23 @@ func (c *TunnelController) Update() {
 	}
 	t.Target = &file.Target{TargetStr: p.Target, LocalProxy: p.LocalProxy}
 	t.Password = p.Password
+	t.Username = p.Username
 	t.LocalPath = p.LocalPath
 	t.StripPre = p.StripPre
 	t.ProtoVersion = p.ProtoVersion
 	t.Remark = p.Remark
+	if t.Mode == "socks5" {
+		t.Port = 0
+		t.ServerIp = ""
+		if t.Username == "" {
+			c.badRequest("socks5 username is required")
+			return
+		}
+		if !checkSocks5RouteUnique(t.Username, t.Password, t.Id) {
+			c.badRequest("socks5 username/password is already in use")
+			return
+		}
+	}
 	if err := file.GetDb().UpdateTask(t); err != nil {
 		c.serverErr(err.Error())
 		return
@@ -326,13 +360,23 @@ func (c *TunnelController) Copy() {
 		Status:       true,
 		Remark:       old.Remark,
 		Password:     old.Password,
+		Username:     old.Username,
 		LocalPath:    old.LocalPath,
 		StripPre:     old.StripPre,
 		ProtoVersion: old.ProtoVersion,
 		Target:       old.Target,
 		Flow:         &file.Flow{},
 	}
-	if newTask.Mode != "secret" && newTask.Mode != "p2p" {
+	if newTask.Mode == "socks5" {
+		// Username must be unique — a duplicated socks5 task is
+		// rejected; the operator should rename before duplicating.
+		newTask.Port = 0
+		newTask.ServerIp = ""
+		if !checkSocks5RouteUnique(newTask.Username, newTask.Password, 0) {
+			c.badRequest("socks5 username/password is already in use; rename before duplicating")
+			return
+		}
+	} else if newTask.Mode != "secret" && newTask.Mode != "p2p" {
 		if !tool.TestServerPort(newTask.Port, newTask.Mode) {
 			c.badRequest("the port cannot be opened (occupied or not allowed)")
 			return
@@ -351,4 +395,23 @@ func (c *TunnelController) Copy() {
 		return
 	}
 	c.ok(map[string]int{"id": newId})
+}
+
+// checkSocks5RouteUnique returns true if no other enabled socks5 task
+// already owns the (username, password) pair. excludeId lets Update /
+// Duplicate skip the row being mutated.
+func checkSocks5RouteUnique(username, password string, excludeId int) bool {
+	unique := true
+	file.GetDb().JsonDb.Tasks.Range(func(_, v any) bool {
+		t, _ := v.(*file.Tunnel)
+		if t == nil || t.Id == excludeId || t.Mode != "socks5" {
+			return true
+		}
+		if t.Username == username && t.Password == password {
+			unique = false
+			return false
+		}
+		return true
+	})
+	return unique
 }

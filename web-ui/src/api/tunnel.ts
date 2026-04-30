@@ -17,6 +17,7 @@ export interface Tunnel {
   Ports: string
   Flow: { ExportFlow: number; InletFlow: number; FlowLimit: number }
   Password: string
+  Username: string
   Remark: string
   TargetAddr: string
   NoStore: boolean
@@ -34,6 +35,7 @@ export interface TunnelPayload {
   target?: string
   localProxy?: boolean
   password?: string
+  username?: string
   remark?: string
   localPath?: string
   stripPre?: string

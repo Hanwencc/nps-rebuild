@@ -122,6 +122,11 @@ const messages = {
       client: '所属客户端',
       deleteConfirm: '确定要删除该隧道吗？',
       copySuccess: '已复制隧道',
+      username: 'SOCKS5 用户名',
+      usernameRequired: 'SOCKS5 用户名不能为空',
+      socks5SharedPort: 'SOCKS5 共享端口',
+      socks5GatewayDisabled: 'SOCKS5 共享网关未启用，请先在“系统设置”里设置 socks5_shared_port',
+      goToSettings: '去配置 →',
     },
     host: {
       list: '域名解析列表',
@@ -320,6 +325,11 @@ const messages = {
       client: 'Client',
       deleteConfirm: 'Delete this tunnel?',
       copySuccess: 'Tunnel copied',
+      username: 'SOCKS5 username',
+      usernameRequired: 'SOCKS5 username is required',
+      socks5SharedPort: 'SOCKS5 shared port',
+      socks5GatewayDisabled: 'SOCKS5 shared gateway is disabled — set socks5_shared_port in Settings first',
+      goToSettings: 'Open Settings →',
     },
     host: {
       list: 'Hosts',

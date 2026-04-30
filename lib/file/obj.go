@@ -144,17 +144,22 @@ func (s *Client) HasHost(h *Host) bool {
 }
 
 type Tunnel struct {
-	Id           int
-	Port         int
-	ServerIp     string
-	Mode         string
-	Status       bool
-	RunStatus    bool
-	Client       *Client
-	Ports        string
-	Flow         *Flow
-	Password     string
-	Remark       string
+	Id       int
+	Port     int
+	ServerIp string
+	Mode     string
+	Status   bool
+	RunStatus bool
+	Client   *Client
+	Ports    string
+	Flow     *Flow
+	Password string
+	Remark   string
+	// Username — Phase 9 shared SOCKS5 gateway:
+	// for mode=="socks5" this is the routing key (SOCKS5 user name).
+	// Combined with Password, the global gateway dispatches the
+	// connection to this Tunnel's Client. Ignored for other modes.
+	Username     string
 	TargetAddr   string
 	NoStore      bool
 	LocalPath    string

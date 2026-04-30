@@ -141,7 +141,7 @@ const cmdCompose = computed(() => {
     'version: "3.8"',
     'services:',
     '  npc:',
-    '    image: yisier1/npc',
+    '    image: ghcr.io/hanwencc/npc:latest',
     `    container_name: npc-${i.id}`,
     '    restart: always',
     '    network_mode: host',

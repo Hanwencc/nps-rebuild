@@ -85,6 +85,11 @@ var settingsCatalog = []settingDescriptor{
 	{Key: "http_cache_length", Label: "HTTP 缓存条目数", Group: "HTTP/HTTPS 代理", Type: "int"},
 
 	// ----- p2p / pprof -----
+	// ----- shared SOCKS5 gateway (Phase 9) -----
+	{Key: "socks5_shared_port", Label: "SOCKS5 共享端口", Group: "SOCKS5 共享网关", Type: "int", Help: "0 表示禁用；保存后立即重启监听器，所有 SOCKS5 任务复用此端口"},
+	{Key: "socks5_shared_ip", Label: "SOCKS5 监听 IP", Group: "SOCKS5 共享网关", Type: "string", Help: "默认 0.0.0.0；保存后立即重启监听器"},
+
+	// ----- p2p / pprof -----
 	{Key: "p2p_ip", Label: "P2P 服务 IP", Group: "P2P / Debug", Type: "string", NeedsRestart: true},
 	{Key: "p2p_port", Label: "P2P 端口", Group: "P2P / Debug", Type: "int", NeedsRestart: true},
 	{Key: "pprof_ip", Label: "pprof IP", Group: "P2P / Debug", Type: "string", NeedsRestart: true},

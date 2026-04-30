@@ -28,6 +28,12 @@ var (
 	Bridge  *bridge.Bridge
 	RunList sync.Map //map[int]interface{}
 	once    sync.Once
+
+	// Socks5GatewayInfoFn lets cmd/nps publish the live state of the
+	// Phase 9 SOCKS5 shared gateway without creating an import cycle
+	// (web/api -> server is fine; web/api -> cmd/nps is not). The
+	// admin API checks for nil before calling.
+	Socks5GatewayInfoFn func() (listening bool, addr string, port int, routes int)
 )
 
 func init() {
@@ -138,7 +144,12 @@ func NewMode(Bridge *bridge.Bridge, c *file.Tunnel) proxy.Service {
 	case "tcp", "file":
 		service = proxy.NewTunnelModeServer(proxy.ProcessTunnel, Bridge, c)
 	case "socks5":
-		service = proxy.NewSock5ModeServer(Bridge, c)
+		// Phase 9: per-port SOCKS5 listener removed. socks5 tasks are
+		// now routing entries served by the global Sock5SharedServer
+		// (cmd/nps/socks5_gateway.go). Returning nil here would cause
+		// AddTask to log "the mode is not correct"; the early-return in
+		// AddTask treats socks5 as virtual instead.
+		return nil
 	case "httpProxy":
 		service = proxy.NewTunnelModeServer(proxy.ProcessHttp, Bridge, c)
 	case "tcpTrans":
@@ -174,7 +185,10 @@ func StopServer(id int) error {
 				return err
 			}
 			logs.Info("stop server id %d", id)
-		} else {
+		} else if v != nil {
+			// Non-nil but not a Service: unexpected. Virtual tasks
+			// (secret/p2p/socks5) store nil here intentionally and
+			// should not warn.
 			logs.Warn("stop server id %d error", id)
 		}
 		if t, err := file.GetDb().GetTask(id); err != nil {
@@ -193,9 +207,13 @@ func StopServer(id int) error {
 
 // add task
 func AddTask(t *file.Tunnel) error {
-	if t.Mode == "secret" || t.Mode == "p2p" {
-		logs.Info("secret task %s start ", t.Remark)
-		//RunList[t.Id] = nil
+	if t.Mode == "secret" || t.Mode == "p2p" || t.Mode == "socks5" {
+		// Phase 9: socks5 joins the virtual-task family. The global
+		// Sock5SharedServer (cmd/nps/socks5_gateway.go) services every
+		// route by walking jdb.Tasks at connect time, so AddTask here
+		// only has to publish the entry into RunList for status pages.
+		t.RunStatus = true
+		logs.Info("%s task %s registered", t.Mode, t.Remark)
 		RunList.Store(t.Id, nil)
 		return nil
 	}

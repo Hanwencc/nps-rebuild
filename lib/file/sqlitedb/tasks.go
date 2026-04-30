@@ -17,10 +17,11 @@ const taskColumns = `id, client_id, mode, port, server_ip, status,
 	no_store, inlet_flow, export_flow, flow_limit,
 	target_str, target_local_proxy, multi_account_map,
 	health_check_timeout, health_max_fail, health_check_interval,
-	http_health_url, health_check_type, health_check_target`
+	http_health_url, health_check_type, health_check_target,
+	username`
 
-// 26 columns => 26 placeholders.
-const taskPlaceholders = `?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?`
+// 27 columns => 27 placeholders (Phase 9 added `username`).
+const taskPlaceholders = `?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?`
 
 // taskArgs flattens a *file.Tunnel into the positional arguments matching
 // taskColumns. Used by both UPSERT and the backfill path.
@@ -58,6 +59,7 @@ func taskArgs(t *file.Tunnel) []any {
 		targetStr, targetLocalProxyInt, multiAccountJSON,
 		t.HealthCheckTimeout, t.HealthMaxFail, t.HealthCheckInterval,
 		t.HttpHealthUrl, t.HealthCheckType, t.HealthCheckTarget,
+		t.Username,
 	}
 }
 
@@ -84,6 +86,7 @@ func scanTask(scan func(...any) error) (*file.Tunnel, int, error) {
 		&t.Target.TargetStr, &targetLocalProxyInt, &multiAccountJSON,
 		&t.HealthCheckTimeout, &t.HealthMaxFail, &t.HealthCheckInterval,
 		&t.HttpHealthUrl, &t.HealthCheckType, &t.HealthCheckTarget,
+		&t.Username,
 	); err != nil {
 		return nil, 0, err
 	}
@@ -130,7 +133,8 @@ func (s *Store) UpsertTask(t *file.Tunnel) error {
 			health_check_interval=excluded.health_check_interval,
 			http_health_url=excluded.http_health_url,
 			health_check_type=excluded.health_check_type,
-			health_check_target=excluded.health_check_target`,
+			health_check_target=excluded.health_check_target,
+			username=excluded.username`,
 		args...)
 	if err != nil {
 		return fmt.Errorf("upsert task id=%d: %w", t.Id, err)

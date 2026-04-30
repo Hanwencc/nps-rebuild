@@ -552,4 +552,8 @@ func run() {
 	// Adopt the implicit httpHostServer once StartNewServer publishes
 	// it at RunList[0]; needed for HTTP/HTTPS proxy hot-restart.
 	adoptInitialHttpHostServer()
+	// Phase 9: bring up the global SOCKS5 gateway. Honors
+	// socks5_shared_port=0 by silently doing nothing; otherwise starts
+	// a listener that will be rebound by the settings hot hook.
+	startSocks5Gateway()
 }

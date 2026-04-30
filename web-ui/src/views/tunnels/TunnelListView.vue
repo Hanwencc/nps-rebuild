@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import {
   NButton,
   NCard,
@@ -16,12 +17,14 @@ import {
   NSpace,
   NSwitch,
   NTag,
+  NAlert,
   useMessage,
   type DataTableColumns,
   type PaginationProps,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { tunnelApi, type Tunnel, type TunnelPayload } from '@/api/tunnel'
+import { socks5Api, type Socks5GatewayStatus } from '@/api/socks5'
 import { clientApi } from '@/api/client'
 import type { Client } from '@/api/types'
 import { ApiError } from '@/api/request'
@@ -90,9 +93,13 @@ async function load() {
 watch(mode, () => {
   pagination.page = 1
   void load()
+  if (mode.value === 'socks5') void loadSocks5Gateway()
 })
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  if (mode.value === 'socks5') void loadSocks5Gateway()
+})
 
 async function onToggle(row: Tunnel) {
   try {
@@ -136,11 +143,24 @@ const form = reactive<TunnelPayload>({
   target: '',
   localProxy: false,
   password: '',
+  username: '',
   remark: '',
   localPath: '',
   stripPre: '',
   protoVersion: '',
 })
+
+// Phase 9 — shared SOCKS5 gateway status. Loaded lazily when the user
+// opens the tunnels view in socks5 mode so we can warn that the global
+// listener is disabled (port=0) and link them to the settings page.
+const socks5Gateway = ref<Socks5GatewayStatus | null>(null)
+async function loadSocks5Gateway() {
+  try {
+    socks5Gateway.value = await socks5Api.gateway()
+  } catch {
+    socks5Gateway.value = null
+  }
+}
 
 const clientOptions = ref<{ label: string; value: number }[]>([])
 async function loadClients() {
@@ -163,6 +183,7 @@ function resetForm() {
   form.target = ''
   form.localProxy = false
   form.password = ''
+  form.username = ''
   form.remark = ''
   form.localPath = ''
   form.stripPre = ''
@@ -186,6 +207,7 @@ async function openEdit(row: Tunnel) {
   form.target = row.Target?.TargetStr ?? ''
   form.localProxy = !!row.Target?.LocalProxy
   form.password = row.Password
+  form.username = row.Username
   form.remark = row.Remark
   form.localPath = row.LocalPath
   form.stripPre = row.StripPre
@@ -196,6 +218,10 @@ async function openEdit(row: Tunnel) {
 async function submit() {
   if (!form.clientId) {
     message.warning(t('tunnel.client') + ' ?')
+    return
+  }
+  if (form.mode === 'socks5' && !form.username) {
+    message.warning(t('tunnel.usernameRequired'))
     return
   }
   saving.value = true
@@ -227,8 +253,9 @@ function bytesHuman(n?: number): string {
 }
 
 const isPortMode = computed(
-  () => !['secret', 'p2p', 'file'].includes(mode.value),
+  () => !['secret', 'p2p', 'file', 'socks5'].includes(mode.value),
 )
+const isSocks5Mode = computed(() => mode.value === 'socks5')
 const isSecretMode = computed(() =>
   ['secret', 'p2p'].includes(mode.value),
 )
@@ -248,6 +275,10 @@ const columns = computed<DataTableColumns<Tunnel>>(() => {
   ]
   if (isPortMode.value) {
     base.push({ title: t('tunnel.port'), key: 'Port', width: 100 })
+  }
+  if (isSocks5Mode.value) {
+    base.push({ title: t('tunnel.username'), key: 'Username', width: 140 })
+    base.push({ title: t('tunnel.password'), key: 'Password', width: 140 })
   }
   if (isSecretMode.value) {
     base.push({ title: t('tunnel.password'), key: 'Password', width: 140 })
@@ -380,6 +411,24 @@ const showProtoVersion = computed(() => isHttpMode.value)
       </NSpace>
     </template>
 
+    <NAlert
+      v-if="isSocks5Mode && socks5Gateway"
+      :type="socks5Gateway.listening ? 'success' : 'warning'"
+      :show-icon="true"
+      style="margin-bottom: 12px"
+    >
+      <template v-if="socks5Gateway.listening">
+        {{ t('tunnel.socks5SharedPort') }}: {{ socks5Gateway.addr }}
+        <span style="opacity: 0.7">({{ socks5Gateway.routes }})</span>
+      </template>
+      <template v-else>
+        {{ t('tunnel.socks5GatewayDisabled') }}
+        <RouterLink to="/settings" style="margin-left: 8px">
+          {{ t('tunnel.goToSettings') }}
+        </RouterLink>
+      </template>
+    </NAlert>
+
     <NDataTable
       :columns="columns"
       :data="rows"
@@ -414,6 +463,14 @@ const showProtoVersion = computed(() => isHttpMode.value)
           <NFormItem v-if="isPortMode" :label="t('tunnel.serverIp')">
             <NInput v-model:value="form.serverIp" />
           </NFormItem>
+          <template v-if="isSocks5Mode">
+            <NFormItem :label="t('tunnel.username')">
+              <NInput v-model:value="form.username" />
+            </NFormItem>
+            <NFormItem :label="t('tunnel.password')">
+              <NInput v-model:value="form.password" />
+            </NFormItem>
+          </template>
           <NFormItem v-if="isSecretMode" :label="t('tunnel.password')">
             <NInput v-model:value="form.password" />
           </NFormItem>

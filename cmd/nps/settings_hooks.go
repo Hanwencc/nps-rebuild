@@ -109,6 +109,9 @@ func registerSettingsHotHooks() {
 		})
 	}
 
+	// --- tier 4: SOCKS5 shared gateway listener rebind --------------
+	registerSocks5GatewayHooks()
+
 	// --- audit log (wildcard) ----------------------------------------
 	// Fired AFTER any specific-key hook, once per changed key. Skip
 	// password-shaped keys to avoid leaking secrets into nps.log.

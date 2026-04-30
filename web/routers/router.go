@@ -48,6 +48,9 @@ func Init() {
 		beego.NSRouter("/tunnels/:id/start", &api.TunnelController{}, "post:Start"),
 		beego.NSRouter("/tunnels/:id/stop", &api.TunnelController{}, "post:Stop"),
 		beego.NSRouter("/tunnels/:id/copy", &api.TunnelController{}, "post:Copy"),
+		// SOCKS5 shared gateway (Phase 9) — read-only status; config
+		// goes through /settings (keys: socks5_shared_port, _ip).
+		beego.NSRouter("/socks5/gateway", &api.Socks5Controller{}, "get:Gateway"),
 		// hosts
 		beego.NSRouter("/hosts", &api.HostController{}, "get:List;post:Create"),
 		beego.NSRouter("/hosts/:id", &api.HostController{},
