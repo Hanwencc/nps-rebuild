@@ -68,9 +68,13 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
         -o /out/nps ./cmd/nps
 
 # ---------- 3. runtime -----------------------------------------------------
-# distroless/static includes ca-certificates + tzdata + /etc/passwd with
-# the `nonroot` user (uid 65532). No shell, no package manager.
-FROM gcr.io/distroless/static-debian12:nonroot AS runtime
+# distroless/static includes ca-certificates + tzdata. Use the root
+# variant (no `:nonroot`) so a bind-mounted /conf created by the host
+# operator (typically owned by root or the docker user) is writable
+# without forcing them to chown to uid 65532. NPS is a server-side
+# tool and historically runs as root in Docker; switch back to
+# `:nonroot` only if you also chown the bind mount.
+FROM gcr.io/distroless/static-debian12:latest AS runtime
 LABEL org.opencontainers.image.title="nps" \
       org.opencontainers.image.description="NPS — intranet penetration proxy server" \
       org.opencontainers.image.source="https://github.com/ehang-io/nps" \
@@ -80,9 +84,7 @@ WORKDIR /
 COPY --from=builder /out/nps /nps
 # Default config bundle, used on first boot when /conf is an empty volume.
 # Mount-override at runtime: `-v $(pwd)/conf:/conf`.
-COPY --chown=nonroot:nonroot conf /conf
-
-USER nonroot:nonroot
+COPY conf /conf
 
 # 8024  bridge (TCP/KCP)
 # 8025  TLS bridge

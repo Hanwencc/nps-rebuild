@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   nps:
-    image: yisier1/nps
+    image: ghcr.io/hanwencc/nps:latest
     container_name: nps
     restart: always
     network_mode: host
