@@ -20,6 +20,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -42,6 +43,18 @@ type Store struct {
 // Open opens (or creates) the SQLite database at `path`,
 // applies pragmas and runs all embedded migrations.
 func Open(path string) (*Store, error) {
+	// Ensure the parent directory exists. modernc.org/sqlite returns
+	// the cryptic SQLITE_CANTOPEN ("unable to open database file (14)")
+	// when the containing directory is missing — common in fresh
+	// Docker / first-run setups where /conf has not been bind-mounted
+	// or pre-created. Create it now so a missing directory no longer
+	// blocks first boot; the file itself is created by the driver.
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("sqlite mkdir %s: %w", dir, err)
+		}
+	}
+
 	dsnW := buildDSN(path, true)
 	dsnR := buildDSN(path, false)
 

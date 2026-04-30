@@ -498,6 +498,10 @@ func run() {
 				logs.Info("app_settings: applied %d row(s) from SQLite onto beego.AppConfig", n)
 			}
 		}
+		// Seed any settings that nps.conf and SQLite both lack so a
+		// fresh install (Docker first run, missing /conf bind mount,
+		// stripped nps.conf) does not crash on bridge_port parse.
+		applySettingsDefaults(store)
 		// Phase 6.1: bridge.ServerTlsEnable was read at line 107 from
 		// nps.conf only; refresh it now that SQLite has overridden the
 		// in-memory beego.AppConfig (otherwise SQLite-stored tls_enable
